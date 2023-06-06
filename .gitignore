@@ -71,3 +71,6 @@ modules/
 
 # ROM files, memory state etc.
 *.bin
+
+# Compiler settings - keep this local
+*.dof

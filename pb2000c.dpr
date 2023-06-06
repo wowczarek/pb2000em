@@ -13,7 +13,9 @@ uses
   Lcd in 'lcd.pas',
   Port in 'port.pas',
   Decoder in 'decoder.pas',
-  Exec in 'exec.pas';
+  Exec in 'exec.pas',
+  Serial in 'serial.pas' {SerialForm},
+  Remote in 'remote.pas' {RemoteForm};
 
 {$R *.res}
 
@@ -22,5 +24,7 @@ begin
   Application.Title := 'Casio PB-2000C Emulator';
   Application.CreateForm(TMainForm, MainForm);
   Application.CreateForm(TDebugForm, DebugForm);
+  Application.CreateForm(TSerialForm, SerialForm);
+  Application.CreateForm(TRemoteForm, RemoteForm);
   Application.Run;
 end.

@@ -10,7 +10,7 @@ interface
 
 implementation
 
-  uses Def, Decoder, Port;
+  uses Def, Decoder, Port, Serial;
 
   type Proc1 = procedure;
 
@@ -35,6 +35,7 @@ implementation
   procedure CpuWakeUp (apo_value: boolean);
   begin
     if not CpuSleep then Exit;
+
     if apo_value then
       flag := flag or APO_bit
     else
@@ -42,6 +43,8 @@ implementation
     speed := 0;
     acycles := 0;
     CpuSleep := False;
+    { HACK: tell the serial port module we've woken up }
+    SerialForm.SerialEnabled(true);
   end {CpuWakeUp};
 
 
@@ -57,7 +60,6 @@ implementation
     ((int_bit = ONINT_bit) and ((ie and $04) <> 0)) then
       CpuWakeUp (True);
   end {SetIfl};
-
 
 { execute a single instruction, returns number of clock cycles }
   function CpuRun : integer;
