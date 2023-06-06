@@ -1,0 +1,124 @@
+version 26 - 2021/12/29
+
+- fixed instructions DIUM, DIDM (setting of the Zero flag)
+
+
+version 25 - 2021/12/24
+
+- more accurate Pulse Interrupt timing (unused, doesn't affect the function)
+
+
+version 24 - 2021/04/28
+
+- execution of instructions spanning two memory areas
+
+
+version 23 - 2012/08/10
+
+- fixed instruction OFF (incorrect PC value when executed from the internal
+  ROM, with the OM-53B card the system couldn't be turned back on)
+
+
+version 22 - 2012/08/03
+
+- updated instruction timing
+
+
+version 21 - 2012/07/28
+
+- updated Power On process (APO bit, ON terminal)
+- fixed missing IE register in the debugger
+
+
+version 20 - 2012/07/23
+
+- updated instruction OFF
+- main registers, SSP and USP are saved in the "register.bin" file
+
+
+version 19, 2011/08/31
+
+- more accurate emulation of the LCD controller, all known commands are
+  supported except the scrolling function of the command $8
+
+
+version 18, 2010/12/19
+
+- debugger code cleanup in order to make it more portable
+- debugger invoked with the key F3 instead of F10, because F10 appears to be
+  by default reserved for the system to switch between windows
+- fixed a bug in the debbuger (the built-in assember modified the contents
+  of the UA register)
+- all file names converted to lower case
+
+
+version 17, 2010/09/29
+
+- added assembler
+
+
+version 16, 2010/07/31
+
+- corrected BCD arithmetic instructions (for non-BCD operands they
+  produced different results than the real device)
+- the application priority changed from realtime to normal
+
+
+version 14, 2008/11/18
+
+- fixed a bug in the debugger (incorrect address in the disassembly
+  window after a breakpoint)
+
+
+version 13, 2008/07/24
+
+- added FDD support over the network
+- added extra 32kB RAM in page 2
+- changed the way the application form is dragged
+
+
+version 12, 2008/05/09
+
+- only fixed a bug in the ROM image which influenced some floating point
+  functions, e.g. RND, FRAC
+
+
+version 11, 2008/03/27
+
+- corrected drawing modes in the LCD system
+- fixed command 8 of the LCD system (character width in the text mode)
+
+
+version 10, 2008/03/20
+
+- accurate emulation of the interrupt system
+- improved emulation of the LCD controller, more commands supported
+- bits 10..12 of the KY register supported
+- added keyboard overlay
+
+
+version 09, 2008/02/15
+
+- keys CAPS and red [S] re-assigned to Page Down and Page Up
+
+
+version 08, 2008/02/13
+
+- adjustable CPU clock
+- more accurate and configurable ON frequency
+
+
+version 06, 2008/02/04
+
+- choice between the English/Japanese version based on the absence/presence
+  of the KANA key on the Face.bmp image
+
+
+version 05, 2008/02/03
+
+- interrupts are serviced in the memory bank 0
+
+
+version 03, 2008/01/31
+
+- first public release
