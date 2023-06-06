@@ -1,6 +1,6 @@
 object DebugForm: TDebugForm
   Left = 133
-  Top = 141
+  Top = 117
   Width = 633
   Height = 437
   Caption = 'Debug Window'

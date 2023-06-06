@@ -23,6 +23,9 @@ interface
 
   const
 
+  PLATFORM_ID = 'PB-2000C';
+  VERSION_STR = 'V16-WO';
+
 { status bits of the Flag Register F }
     Z_bit	= $80;
     C_bit	= $40;
@@ -75,8 +78,39 @@ interface
     OP_bit	= $01;
     LCDCE	= (CE1_bit or CE2_bit);
 
+{ bits of the serial port status register &H0C00}
+    RS_TXFULL   = $01;
+    RS_RXFULL   = $02;
+    RS_CTS      = $04;
+    RS_DSR      = $08;
+    RS_DCD      = $10;
+    RS_RXERR    = $20;
+
+{ bits of the serial port status register &H0C01}
+    RS_PARERR   = $01;
+    RS_FRMERR   = $02;
+
+{ bits of the serial port status register &H0C02}
+    RS_RXFULLINT = $01;
+
+{ 'Option Code' = identification of a connected peripheral interface }
+    OC_NONE     = $FF;
+    OC_FA7      = $00;
+    OC_MD100    = $55;
+
 { free adress space, number of bytes determined by the function FetchOpcode }
     dummysrc: array[0..3] of byte = ( $FF, $FF, $FF, $FF );
+
+{ key code of first letter from list below }
+    LFIRSTCODE = 4;
+{ characters which can be entered from keyboard as is }
+    Letters: string[71] =
+	#09'''()[]|aaaaaQWERTYUIOP=ASDFGHJKL;:ZXCVBNM,aa aaaaaaaaaaa/789*456-123+0.';
+{ characters which require the [s] key (overlaid onto the above) }
+    ShiftLetters: string[70] =
+  	   'a!"#$%&aaaaa?@\_`{}~<>^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+
 
   var
     memdef: array[0..MEMORIES-1] of mem_properties = (

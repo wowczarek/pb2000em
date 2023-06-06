@@ -7,21 +7,24 @@ interface
   var
     pd, pe, pdi: byte;
     OptionCode: byte;
-
   function ReadPd : byte;
   procedure WritePd;
   procedure IoInit;
   procedure IoClose;
   function IoWrPtr (index: integer) : pointer;
   function IoRdPtr (index: integer) : pointer;
+  { serial port support }
+  procedure SerialTxByte;
+  procedure SerialPoll;
 
 
 implementation
 
-  uses Def, Main;
+  uses Def, Main, SysUtils,Serial;
 
 var
-  FddWrData, FddRdData, OldPort: byte;
+  RegRdData, RegWrData, FddWrData, FddRdData, SerialWrData, SerialRdData, OldPort: byte;
+  SerialRxBuffer: Array[0..255] of byte;
 
 function GetPort: byte;
 begin
@@ -47,7 +50,7 @@ begin
     begin
       with MainForm.FddSocket do
       begin
-        if (OptionCode = $55)
+        if (OptionCode = OC_MD100)
 		and (Address <> '') and (Port <> 0) then Open;
       end {with};
     end {if};
@@ -95,7 +98,7 @@ begin
   FddRdData := OptionCode;
   with MainForm.FddSocket do
   begin
-    if (Address = '') or (Port = 0) then OptionCode := $FF;
+    if ((Address = '') or (Port = 0)) and (MainForm.SerialPort = 0) then OptionCode := OC_NONE;
   end {with};
 end {IoInit};
 
@@ -105,6 +108,18 @@ begin
   MainForm.FddSocket.Close;
 end {IoClose};
 
+{ transmit a byte out through serial port }
+procedure SerialTxByte;
+begin
+        SerialForm.txByte(SerialWrData);
+end;
+
+{ ask to be notified of incoming serial port data }
+procedure SerialPoll;
+begin
+        { execute a delayed serial poll }
+        SerialForm.RxPoll(true);
+end;
 
 function IoWrPtr (index: integer) : pointer;
 begin
@@ -112,6 +127,13 @@ begin
   if (GetPort and (PD_PWR or PD_RES)) = $00 then
   begin
     case index of
+      { address 3, write: transmit a byte via serial port, but only if using MD-100 or FA-7 }
+      3: if (OptionCode = OC_FA7) or (OptionCode = OC_MD100) then
+        begin
+                IoWrPtr := @SerialWrData;
+                procptr := @SerialTxByte;
+        end;
+      { address 4, write: FDD output port }
       4: IoWrPtr := @FddWrData;
     end {case};
   end {if};
@@ -124,10 +146,30 @@ begin
   if (GetPort and (PD_PWR or PD_RES)) = $00 then
   begin
     case index of
+      { address 0, read: advertise CTS+DSR+DCD }
+      0: if (OptionCode = OC_FA7) or (OptionCode = OC_MD100) then
+        begin
+                RegRdData := RS_CTS or RS_DSR or RS_DCD;
+                IoRdPtr := @RegRdData;
+        end;
+      { address 1, read: no errors, SW1..SW3 = 111, low = 000 (9600 baud ) }
+      1: begin
+                RegRdData := $00; { $38; when SW1..SW3 = 000 }
+                IoRdPtr := @RegRdData;
+        end;
+      { address 2, read: serial port data }
+      2: if (OptionCode = OC_FA7) or (OptionCode = OC_MD100) then
+         begin
+                { only read from serial port if INT1 unmasked, dequeue a byte if there is one to dequeue }
+                if ((ib and INT1_bit) <> 0) and SerialForm.RxDequeue(SerialRdData) then
+                begin
+                        IoRdPtr := @SerialRdData;
+                end;
+         end;
+      { address 3, read: FDD input port }
       3: IoRdPtr := @FddRdData;
     end {case};
   end {if};
 end {IoRdPtr};
-
 
 end.

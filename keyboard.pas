@@ -58,13 +58,12 @@ const
 var
   KeyCode1: integer;		{ from the mouse }
   KeyCode2: integer;		{ from the keyboard }
-
-
+  DelayedKeyCode2: integer = 0; { two-key combo, code sent on key release }
   function ReadKy (Ko: byte) : word;
 
 
 implementation
-
+uses Serial,sysutils;
 const
 
 { tables converting KeyCode1 and KeyCode2 to the KY state for given KO }

@@ -104,10 +104,12 @@ interface
   procedure Off_FE;
   procedure Trp_FF;
 
+  { serial port extra }
+  procedure SerialPoll;
 
 implementation
 
-  uses Def, Keyboard, Lcd, Port;
+  uses Def, Keyboard, Lcd, Port, Serial;
 
 type
   Func2 = function : boolean;
@@ -578,6 +580,8 @@ begin
     y := y shr 3;
     ib := ib and (y or $E0);
     iserv := iserv and y;
+    { HACK: Inform the serial port module that we have enabled or disabled INT1 }
+    SerialForm.PBOpened((y and INT1_bit) <> 0);
   end {if};
   if (opcode[0] and $40) = 0 then OptionalJr(x);
   Inc (cycles, 3);
@@ -2069,13 +2073,18 @@ begin
   Inc (cycles, 3);
 end {Fst_FA};
 
-
 procedure Slw_FB;
 begin
   speed := 4;
   Inc (cycles, 3);
 end {Slw_FB};
 
+{ ask for an INT1 if we have serial port data waiting }
+procedure SerialPoll;
+begin
+        { Serial poll without delay }
+        SerialForm.RxPoll(false);
+end;
 
 procedure Cani_FC;
 var
@@ -2087,13 +2096,14 @@ begin
     begin
       ib := ib and not mask;
       iserv := iserv and not mask;
+      { HACK: when returning out of INT1, ask for more serial data to trigger another INT1 }
+      if mask = INT1_bit then procptr := @SerialPoll;
       Break;
     end {if};
     mask := mask shr 1;
   until mask < $01;
   Inc (cycles, 3);
 end {Cani_FC};
-
 
 procedure Rtni_FD;
 begin
@@ -2130,6 +2140,8 @@ begin
   if (flag and SW_bit) <> 0 then flag := flag or APO_bit
 	else flag := flag and not APO_bit;
   Inc (cycles, 3);
+  { HACK: tell the serial port module we've gone to sleep }
+  SerialForm.SerialEnabled(false);
 end {Off_FE};
 
 

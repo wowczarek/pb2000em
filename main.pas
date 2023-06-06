@@ -33,20 +33,38 @@ type
     procedure FormDeactivate(Sender: TObject);
     procedure ApplicationDeactivate(Sender: TObject);
   private
+        procedure CMDialogKey( Var msg: TCMDialogKey );
+        message CM_DIALOGKEY;
     { Private declarations }
   public
+        { not serial port as in serial port, but serial port... port. }
+        { OK, let's try again: TCP port used for serial communucation }
+        SerialPort: Integer;
+        { address we listen on for serial connections }
+        SerialAddress: String;
+        { address we listen on for remote connections }
+        RemoteAddress: String;
+        { TCP port that the remote control module will listen on }
+        RemotePort: Integer;
+        { remote key entry interval }
+        KeyInterval: Integer;
     { Public declarations }
   end;
 
 var
     MainForm: TMainForm;
-
+    procedure KeyInterrupt;
+    function MemSave (fname: string; memory: PChar; fsize: integer) : boolean;
+    procedure SaveState(warn: boolean; release: boolean);
+    procedure ReleaseKey1 (X, Y: Integer);
+    function TogglePower: boolean;
+    procedure setpower(p: boolean);
 implementation
 
 {$R *.dfm}
 
 uses
-    Def, Cpu, Debug, Keyboard, Lcd, Port;
+    Def, Cpu, Debug, Keyboard, Lcd, Port, Serial, Remote;
 
 const
     FaceName: string = 'face.bmp';
@@ -62,7 +80,6 @@ var
     BitMap, Face, LcdBmp, KeyBmp, OverlayBmp: TBitMap;
     RedrawReq: boolean;		{ true if the LcdBmp image has changed and
 				  needs to be redrawn }
-
 { LCD }
     BkColor: TColor = clWhite;
     ScrMem: array[0..LCDSIZE-1] of nibble; { shadow LCD data memory }
@@ -79,6 +96,59 @@ var
     keypads1: integer = KEYPADS;
     lastkey1: integer = LASTKEYCODE;
 
+{ Power switch toggle }
+function TogglePower: boolean;
+begin
+        Result := false;
+        KeyCode1 := 1;
+        flag := flag xor SW_bit;
+        ReleaseKey1(-1,-1);
+        if (flag and SW_bit) <> 0 then
+        begin
+                CpuWakeUp (False);
+                Result := true;
+        end;
+
+end;
+
+procedure SetPower(p: boolean);
+var cp: boolean;
+begin
+        cp := (flag and SW_bit) <> 0;
+        if (cp xor p) then TogglePower;
+
+end;
+
+procedure SaveState(warn: boolean; release: boolean);
+var
+  i, size: integer;
+begin
+{ save the register file image }
+  ptrw(@mr[32])^ := ss;
+  ptrw(@mr[34])^ := us;
+  if not MemSave (RegName, PChar(@mr[0]), 36) then
+  begin
+    if warn then MessageDlg (SaveMsg + RegName, mtWarning, [mbOk], 0);
+  end {if};
+{ save the memory images }
+  for i:=0 to MEMORIES-1 do
+  begin
+    with memdef[i] do
+    begin
+      size := (last-first) shl memorg;
+      if writable and (filename <> '') then
+      begin
+        if not MemSave (filename, storage, size) then
+        begin
+          if warn then MessageDlg (SaveMsg + filename, mtWarning, [mbOk], 0);
+        end {if};
+      end {if};
+      if release then
+        FreeMem (storage, size);
+    end {with};
+  end {for};
+
+end;
 
 procedure ResetAll;
 begin
@@ -460,18 +530,34 @@ end {MemSave};
 procedure IniLoad;
 var
   Ini1: TIniFile;
+  InterfaceType: String;
 begin
   Ini1 := TIniFile.Create (ExpandFileName(IniName));
   with Ini1 do
   begin
     OscFreq := ReadInteger ('Settings', 'OscFreq', 910);
-    OptionCode := byte (ReadInteger ('Settings', 'OptionCode', 255));
+    OptionCode := byte (ReadInteger ('Settings', 'OptionCode', OC_NONE));
+    InterfaceType := ReadString('Settings','Interface','');
+    if (OptionCode <> OC_NONE) and (InterfaceType <> '') then
+    begin
+                if (InterfaceType = 'FA7') or (InterfaceType = 'FA-7') then OptionCode := OC_FA7;
+                if (InterfaceType = 'MD100') or (InterfaceType = 'MD-100') then OptionCode := OC_MD100;
+    end;
     MainForm.FddSocket.Address := ReadString ('Floppy Disk Drive', 'Address', '');
     MainForm.FddSocket.Port := ReadInteger ('Floppy Disk Drive', 'Port', 0);
+    { Serial port... port }
+    MainForm.SerialPort := ReadInteger ('Serial', 'Port', 0);
+    { Serial port listen address }
+    MainForm.SerialAddress := ReadString('Remote', 'Listen', '0.0.0.0');
+    { Remote control port }
+    MainForm.RemotePort := ReadInteger ('Remote', 'Port', 0);
+    { Remote control listen address }
+    MainForm.RemoteAddress := ReadString('Remote', 'Listen', '0.0.0.0');
+    { Remote control key input interval in ms (keyup = half time) }
+    MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 50);
   end {with};
   Ini1.Free;
 end {IniLoad};
-
 
 { initialise the application }
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -535,8 +621,6 @@ end;
 
 { terminate the application }
 procedure TMainForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
-var
-  i, size: integer;
 begin
 { As the memory appears to be deallocated before destroying the timers, it is
   necessary to prevent the emulated CPU to access the memory after it has been
@@ -546,29 +630,8 @@ begin
   RefreshTimer.Enabled := False;
   SecTimer.Enabled := False;
   IoClose;
-{ save the register file image }
-  ptrw(@mr[32])^ := ss;
-  ptrw(@mr[34])^ := us;
-  if not MemSave (RegName, PChar(@mr[0]), 36) then
-  begin
-    MessageDlg (SaveMsg + RegName, mtWarning, [mbOk], 0);
-  end {if};
-{ save the memory images }
-  for i:=0 to MEMORIES-1 do
-  begin
-    with memdef[i] do
-    begin
-      size := (last-first) shl memorg;
-      if writable and (filename <> '') then
-      begin
-        if not MemSave (filename, storage, size) then
-        begin
-          MessageDlg (SaveMsg + filename, mtWarning, [mbOk], 0);
-        end {if};
-      end {if};
-      FreeMem (storage, size);
-    end {with};
-  end {for};
+  { save registers and memory images }
+  SaveState(true, true);
   BitMap.Free;
   Face.Free;
   LcdBmp.Free;
@@ -607,59 +670,118 @@ end {OverlayFlip};
 
 
 procedure TMainForm.FormKeyPress(Sender: TObject; var Key: Char);
-const
-{ key codes FIRST to FIRST+COUNT-1 }
-  FIRST = 5;
-  COUNT = 70;
-  Letters: string[COUNT] =
-	'''()[]|aaaaaQWERTYUIOP=ASDFGHJKL;:ZXCVBNM,aa aaaaaaaaaaa/789*456-123+0.';
-var
-  i: integer;
+{ letter and shift-letter list moved to Def unit }
+  var
+  n,sn: integer;
 begin
-  i := 1;
   Key := UpCase(Key);
-  while (i <= COUNT) and (Key <> Letters[i]) do Inc (i);
-  if i <= COUNT then
+  n := pos(Key, Letters);
+  sn := pos(Key, ShiftLetters);
+  { key is on key face, send key code }
+  if (n > 0) then
   begin
-    KeyCode2 := i+(FIRST-1);
+    KeyCode2 := n + LFIRSTCODE - 1;
     KeyInterrupt;
-  end {if};
+  end
+  { key is not on key face and requires shift, send shift (red S) first and send wanted key on release }
+  else if (sn > 0) then
+  begin
+     KeyCode2 := 15;
+     DelayedKeyCode2 := sn + LFIRSTCODE - 1;
+     KeyInterrupt;
+  end;
+
 end;
 
+{ intercepting the VK_TAB key, Delphi FAQ2060D.txt   Detecting tab key press }
+procedure TMainForm.CMDialogKey(var msg: TCMDialogKey);
+begin
+  if msg.Charcode <> VK_TAB then
+   inherited;
+end;
 
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
   save: integer;
+  shiftable: boolean;
 begin
   save := Key;
-  case Key of
+  if ssShift in shift then case Key of
+    VK_ESCAPE:  CpuWakeUp (False);
+    VK_APPS:    KeyCode2 := 56; { CAL } { shift-menu = CAL }
+    VK_F1:      KeyCode2 := 76; { M1 = 1st key under LCD }
+    VK_F2:      KeyCode2 := 77; { M2 = 2nd key under LCD }
+    VK_F3:      KeyCode2 := 78; { M3 = 1st key under LCD }
+    VK_F4:      KeyCode2 := 79; { M4 = 2nd key under LCD }
+    VK_F5:      KeyCode2 := 80; { ETC }
+    VK_F9:      TogglePower;
+    VK_F12:     KeyCode2 := 58; { CLS used with Shift - special case }
+  end else case Key of
     VK_NEXT:	KeyCode2 := 46;	{ CAPS }
+    VK_MENU:    KeyCode2 := 47; { ANS } { ALT key }
     VK_PRIOR:	KeyCode2 := 15;	{ red S }
     VK_ESCAPE:	KeyCode2 := 57;	{ BRK }
+    VK_F12:     KeyCode2 := 58; { CLS }
     VK_BACK:	KeyCode2 := 59;	{ BS }
     VK_INSERT:	KeyCode2 := 49;	{ INS }
     VK_DELETE:	KeyCode2 := 51;	{ DEL }
+    VK_APPS:    KeyCode2 := 52; { MENU } { menu = menu }
     VK_RETURN:  KeyCode2 := 75;	{ EXE }
+    VK_TAB:     KeyCode2 := 4;  { TAB }
     VK_LEFT:	KeyCode2 := 53;	{ <- }
     VK_RIGHT:	KeyCode2 := 55;	{ -> }
     VK_UP:	KeyCode2 := 50;	{ up }
     VK_DOWN:	KeyCode2 := 54;	{ down }
     VK_F2:	OverlayFlip;
     VK_F3:	DebugForm.Show;
-    VK_F8:	KeyCode2 := 82;	{ New All }
-    VK_F9:	ResetAll;
-  end {case};
-  if (save <> Key) then KeyInterrupt;
-end;
+    VK_F4:      if (SerialPort > 0) and ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) then
+                begin
+                        SerialForm.Visible := not SerialForm.Visible;
+                end;
+    VK_F5:      if RemotePort > 0 then
+                begin
+                        RemoteForm.Visible := not SerialForm.Visible;
+                end;
 
+    VK_F8:	KeyCode2 := 82;	{ New All }
+    VK_F9:      ResetAll;       { RESET }
+  end {case};
+
+  case Key of
+        VK_NEXT, VK_PRIOR, VK_ESCAPE, VK_F12, VK_BACK, VK_INSERT, VK_DELETE,
+        VK_RETURN, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN: shiftable := true;
+  else shiftable := false;
+  end {case};
+
+  { key can be used with red S and we have Shift pressed: send red S and send key on release }
+  if shiftable and (ssShift in Shift) then
+  begin
+        DelayedKeyCode2 := KeyCode2;
+        KeyCode2 := 15;
+        KeyInterrupt;
+  end;
+
+  if (save <> Key) then
+  begin
+   KeyInterrupt;
+  end;
+
+end;
 
 procedure TMainForm.FormKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  KeyCode2 := 0;
-end;
 
+  { a cached keycode needs to be emitted on release }
+  if (DelayedKeyCode2 <> 0) then
+  begin
+        KeyCode2 := DelayedKeyCode2;
+        KeyInterrupt;
+        DelayedKeyCode2 := 0;
+  end else KeyCode2 := 0;
+
+end;
 
 procedure TMainForm.FormPaint(Sender: TObject);
 begin
@@ -773,6 +895,5 @@ begin
   ReleaseKey1 (-1, -1);
   KeyCode2 := 0;
 end;
-
 
 end.
