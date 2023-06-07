@@ -549,11 +549,11 @@ begin
     { Serial port... port }
     MainForm.SerialPort := ReadInteger ('Serial', 'Port', 0);
     { Serial port listen address }
-    MainForm.SerialAddress := ReadString('Serial', 'Listen', '0.0.0.0');
+    MainForm.SerialAddress := ReadString('Serial', 'Listen', '127.0.0.1');
     { Remote control port }
     MainForm.RemotePort := ReadInteger ('Remote', 'Port', 0);
     { Remote control listen address }
-    MainForm.RemoteAddress := ReadString('Remote', 'Listen', '0.0.0.0');
+    MainForm.RemoteAddress := ReadString('Remote', 'Listen', '127.0.0.1');
     { Remote control key input interval in ms (keyup = half time) }
     MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 50);
   end {with};
