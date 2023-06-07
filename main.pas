@@ -538,7 +538,7 @@ begin
     OscFreq := ReadInteger ('Settings', 'OscFreq', 910);
     OptionCode := byte (ReadInteger ('Settings', 'OptionCode', OC_NONE));
     InterfaceType := ReadString('Settings','Interface','');
-    if (OptionCode <> OC_NONE) and (InterfaceType <> '') then
+    if (OptionCode = OC_NONE) and (InterfaceType <> '') then
     begin
                 if (InterfaceType = 'FA7') or (InterfaceType = 'FA-7') then OptionCode := OC_FA7;
                 if (InterfaceType = 'MD100') or (InterfaceType = 'MD-100') then OptionCode := OC_MD100;
