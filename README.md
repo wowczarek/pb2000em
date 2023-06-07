@@ -1,32 +1,32 @@
-Casio PB-2000C emulator Version 26-WO
+# Casio PB-2000C emulator Version 26-WO
 
 This is the source for the enhanced version of Piotr Piątek's PB-2000C emulator written in / for Borland Delphi 5 and this branch corresponds to Piotr's V26 of the PB-2000C emulator.
 
 PB-2000C is my platform of choice. While some items may or may not end up in either the original PB-2000C emulator or any of the other emulators of related platforms by Piotr, I am  not porting any of this to other Piotr's emulators - you can do this yourself easily enough if you wish.
 
-This repository does NOT contain Casio ROM images required for the emulator to function.
+This repository does NOT contain any of the Casio ROM images required for the emulator to function.
 
 The compiled pb2000c.exe or the contents of the .zip file from the Releases section (including - or not - the .ini file) can be copied into the location where extracted Piotr's emulator resides.
 
 Author's official website is at: http://www.pisi.com.pl/piotr433/pb2000ee.htm
 
-The original source resides in the branch: v26-original.
+The original sources reside in the branch: v26-piotr443
 
-Main changes:
+## Main changes:
 
-Usability (keyboard):
+### Usability (keyboard):
 
 - Extensive list of keyboard shortcuts for various keys - keys to be finalised
 - Automatic prepending of keys requiring [s] key with [s], meaning you can enter ?!#{}$@ etc. without issues.
 - Keys which can be combined with [s] such as arrows, CLS etc., will also have [s] automatically prepended when pressed with Shift. If CLS = F12 then Shift-F12 executes [s] followed shortly by [cls].
 
-Serial port emulation support via TCP:
+### Networked serial port emulation support via TCP
 
 Fuly working serial port emulation - baud rate and flow control are mostly ignored. Data can be sent and received via a TCP connection, and the state of INT1 masking / unmasking is tracked, so no data is sent to the PB until it opens its serial port. Serial data can also be peeked in both ASCII and hex, recorded to files (TODO), and files can be transmitted to the serial port (TODO). Supported both when emulating the presence of an FA-7 and an MD-100 (OptionCode setting or the new Interface setting). The serial port module operates a 1024-byte queue which is gradually emptied as PB-2000C reads the data. The plan is to implement a 64-kilobyte buffer in combination with the queue, with queue level monitoring that can maintain the queue at configurable certain maximum depth and move data from the buffer to the queue only once the queue is emptied. This will guarantee overrun-free operation at any speed, as long as you don't exceed the 64-kilobyte buffer backlog.
 
 Note: on the host side this isn't a serial port in the sense of a serial port. This is a TCP port where the emulator listens and passes input to the emulated PB-2000C's serial port and passes output to the TCP client. This can be set up as a serial port in your Windows system using any of the available "Virtual COM port" type drivers, although no baud rate negotiation or anything similar is done; it's a straight up TCP pipe. This was developed mostly to assist with the development of the PBNET project: https://github.com/wowczarek/pbnet - but can of course be used by any application you may want to develop, or can be used with the likes of netcat / socat to send files.
 
-New .ini file settings:
+### New .ini file settings:
 
 ```ini
 [Settings]
@@ -57,11 +57,12 @@ New .ini file settings:
 ; Interval=50
 ```
 
-Remote control protocol:
+### Remote control protocol:
 
 A TCP-based remote control protocol was added with a simple but extensive command parser. It is part-ASCII, part-binary, where command entry is exclusively ASCII which makes it possible to comfortably use it via e.g. a raw telnet or netcat session.
 
 Supports:
+
 - direct character entry, including ANSI escape sequences for cursor keys as well as del, esc, tab, bs, meaning that text can be entered without issues
 - named key entry in the form of <key> where the keys mostly match what's on the key face of the PB-2000C, such as <menu>, <s>, <cls> - supported for most function keys. The silver keys under the LCD are <m1> ... <m4> and <etc>. Currently not supported are the [memo] and [in/out/calc] keys. This sends keyboard shortcuts to the emulator rather than Casio key codes to the CPU - this will be changed so it's independent from keyboard shortcut mappings (TODO)
 - requests, where we ask the emulator for some data or for state, such as <version?>,<power?>,<pause?>, also reading the LCD controller memory through <vmem?>, reading current breakpoint via <bkpt?> (TODO), reading registers via <regs?> (TODO)
