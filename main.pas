@@ -58,7 +58,7 @@ var
     procedure SaveState(warn: boolean; release: boolean);
     procedure ReleaseKey1 (X, Y: Integer);
     function TogglePower: boolean;
-    procedure setpower(p: boolean);
+    procedure SetPower(p: boolean);
 implementation
 
 {$R *.dfm}
@@ -749,11 +749,12 @@ begin
     VK_F9:      ResetAll;       { RESET }
   end {case};
 
-  case Key of
+  shiftable := false;
+
+  if Key in [
         VK_NEXT, VK_PRIOR, VK_ESCAPE, VK_F12, VK_BACK, VK_INSERT, VK_DELETE,
-        VK_RETURN, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN: shiftable := true;
-  else shiftable := false;
-  end {case};
+        VK_RETURN, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN
+        ] then shiftable := true;
 
   { key can be used with red S and we have Shift pressed: send red S and send key on release }
   if shiftable and (ssShift in Shift) then

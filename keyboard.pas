@@ -63,7 +63,7 @@ var
 
 
 implementation
-uses Serial,sysutils;
+
 const
 
 { tables converting KeyCode1 and KeyCode2 to the KY state for given KO }
