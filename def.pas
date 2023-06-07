@@ -47,11 +47,12 @@ interface
 
     INTVECTORS = 5;
 
-    INT1_bit = $10;
-    KEYPULSE_bit = $08;
-    INT2_bit = $04;
-    MINTIMER_bit = $02;
-    ONINT_bit = $01;
+{ interrupt bits }
+    INT1_bit            = $10;
+    KEYPULSE_bit        = $08;
+    INT2_bit            = $04;
+    MINTIMER_bit        = $02;
+    ONINT_bit           = $01;
 
     intmask: array[0..INTVECTORS-1] of byte = (
       INT1_bit, KEYPULSE_bit, INT2_bit, MINTIMER_bit, ONINT_bit );
@@ -107,11 +108,11 @@ interface
     Letters: string[71] =
 	#09'''()[]|aaaaaQWERTYUIOP=ASDFGHJKL;:ZXCVBNM,aa aaaaaaaaaaa/789*456-123+0.';
 { characters which require the [s] key (overlaid onto the above) }
-    ShiftLetters: string[70] =
+    ShiftLetters: string[71] =
   	   'a!"#$%&aaaaa?@\_`{}~<>^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-
-
-
+{ TODO: characters which will trigger a Caps switch when entered with Shift }
+    CapsLetters: string[71] =
+	   'aaaaaaaaaaaaQWERTYUIOPaASDFGHJKLaaZXCVBNMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   var
     memdef: array[0..MEMORIES-1] of mem_properties = (
       (	storage:	nil;

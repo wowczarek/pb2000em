@@ -146,7 +146,7 @@ begin
   if (GetPort and (PD_PWR or PD_RES)) = $00 then
   begin
     case index of
-      { address 0, read: advertise CTS+DSR+DCD }
+      { address 0, read: advertise CTS+DSR+DCD on RS-232 }
       0: if (OptionCode = OC_FA7) or (OptionCode = OC_MD100) then
         begin
                 RegRdData := RS_CTS or RS_DSR or RS_DCD;
@@ -166,7 +166,7 @@ begin
                         IoRdPtr := @SerialRdData;
                 end;
          end;
-      { address 3, read: FDD input port }
+      { address 3, read: FDD input port, will have the OptionCode on device reset }
       3: IoRdPtr := @FddRdData;
     end {case};
   end {if};

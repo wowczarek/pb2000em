@@ -1,3 +1,14 @@
+version 26-wo - ongoing
+
+- implemented serial port support (F4 key to view status)
+- implemented a remote control protocol (F5 key to view status)
+- improved key bindings
+- improved keyboard entry with automatic prepending of [s] key
+- new .ini settings related to serial port and remote control
+- new .ini setting [Settings] -> Interface = "FA-7" or "MD-100",
+  can still be overridden by the OptionCode value
+- for more information refer to README.md
+
 version 26 - 2021/12/29
 
 - fixed instructions DIUM, DIDM (setting of the Zero flag)
