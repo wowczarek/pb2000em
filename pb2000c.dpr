@@ -15,7 +15,8 @@ uses
   Decoder in 'decoder.pas',
   Exec in 'exec.pas',
   Serial in 'serial.pas' {SerialForm},
-  Remote in 'remote.pas' {RemoteForm};
+  Remote in 'remote.pas' {RemoteForm},
+  utils in 'utils.pas';
 
 {$R *.res}
 

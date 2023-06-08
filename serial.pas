@@ -6,12 +6,14 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, ScktComp, ComCtrls, ThdTimer;
+  StdCtrls, ExtCtrls, ScktComp, ComCtrls, ThdTimer, Utils;
 
 const
 
- RXBUFSIZE = 1024;   { TCP maximum grabbable chunk }
- RXQUEUESIZE = 1024; { serial port max queue depth }
+ SOCKBUFSIZE = 1024;   { TCP maximum grabbable chunk }
+ RXQUEUESIZE = 1024;   { serial port max queue depth }
+ RXBUFSIZE =  65535;   { accumulating buffer max size }
+ DEFQFIL =      224;   { fill level default }
 
  _MinHeight = 158; { simplistic window state info for toggling the 'more' section }
  _MaxHeight = 330;
@@ -38,8 +40,6 @@ type
     QueueMonitor: TGroupBox;
     QueueFlush: TButton;
     QueueBar: TProgressBar;
-    Label5: TLabel;
-    QueueLabel: TLabel;
     TestLabel: TLabel;
     Int1Timer: TTimer;
     CntReset: TButton;
@@ -55,6 +55,12 @@ type
     CasioTxHex: TMemo;
     TxCaptureStart: TButton;
     TxCaptureClear: TButton;
+    BufferBar: TProgressBar;
+    QueueLabel: TLabel;
+    BufferLabel: TLabel;
+    rgPolicy: TRadioGroup;
+    BufferLvl: TEdit;
+    Label5: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure RefreshCounters;
     procedure LedTimerTimer(Sender: TObject);
@@ -69,7 +75,6 @@ type
     procedure CasioRxIncrement(count: Integer);
     procedure CasioTxIncrement(count: Integer);
     procedure CaptureByte(var amemo: TMemo; var hmemo: TMemo; b: byte);
-    procedure RxQueueFlush;
     procedure RxEnqueue(var buf: array of byte; len: integer);
     procedure QueueFlushClick(Sender: TObject);
     procedure Int1TimerTimer(Sender: TObject);
@@ -86,6 +91,9 @@ type
     procedure TxCaptureClearClick(Sender: TObject);
     procedure RxCaptureStartClick(Sender: TObject);
     procedure TxCaptureStartClick(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
+    procedure rgPolicyClick(Sender: TObject);
+    procedure BufferLvlChange(Sender: TObject);
   private
     { Private declarations }
 
@@ -94,14 +102,10 @@ type
         ClientTxTotal: Integer;
         CasioRxTotal: Integer;
         CasioTxTotal: Integer;
-
-        { ring buffer }
-        RxQueue: Array[0..RXQUEUESIZE-1] of byte;
-        RxQueueWrite: Integer; { head }
-        RxQueueRead: Integer;  { tail }
-        RxQueued: Integer;     { depth }
-        RxQueueLeft: Integer;  { free }
-
+        { ring buffer for port queue control }
+        RxQueue: TBytePump;
+        { ring buffer for socket data }
+        RxBuffer: TBytePump;
         { host notification / readiness flags }
         Int1Enabled: Boolean;
         Int1Set: Boolean;
@@ -125,7 +129,7 @@ type
 
 var
   SerialForm: TSerialForm;
-
+  LastQfill: integer = DEFQFIL;
 implementation
 
 uses Def, Cpu, Port, Main;
@@ -190,7 +194,8 @@ end;
 { if data available, signal an INT1 either immediately or after a one-shot timer run }
 procedure TSerialForm.RxPoll(delayed: Boolean);
 begin
- if RxQueued > 0 then
+
+  if RxQueue.Count > 0 then
  begin
        if delayed then
        begin
@@ -223,51 +228,32 @@ end;
 { queue an incoming chunk of data onto the RxQueue ring buffer }
 procedure TSerialForm.RxEnqueue(var buf: array of byte; len: integer);
 var
-        i,toEnd: integer;
+        i,res: integer;
 begin
 
         if not Enabled then exit;
 
-        if RxQueueLeft >= len then
-        begin
-                toEnd := RXQUEUESIZE - RxQueueWrite;
-                { we can append to the queue }
-                if len <= toEnd then
-                begin
-                        Move(buf, RxQueue[RxQueueWrite], len);
-                { wrap around }
-                end else begin
-                        Move(buf, RxQueue[RxQueueWrite], toEnd);
-                        Move(buf[toEnd], RxQueue[0], len - toEnd);
-                end;
+        res := RxBuffer.Enqueue(buf,len);
 
-                Inc(RxQueueWrite, len);
-                RxQueueWrite := RxQueueWrite mod RXQUEUESIZE;
-                Inc(RxQueued, len);
-                Dec(RxQueueLeft, len);
-                RxPoll(false);
-                RefreshCounters;
-                if RxCapture then
-                begin
-                    for i := 0 to len - 1 do
+        RxPoll(false);
+        ClientRxIncrement(res);
+        RefreshCounters;
+
+        if RxCapture then
+        begin
+                for i := 0 to len - 1 do
                         CaptureByte(CasioRxAsc, CasioRxHex, buf[i]);
-                end;
         end;
 end;
 
 { read a byte from the RxQueue ring buffer into b - the PB does this byte by byte }
 function TSerialForm.RxDequeue(var b: byte): Boolean;
 begin
-        RxDequeue := False;
-        if RxQueued > 0 then
+        Result := False;
+        if RxQueue.Dequeue(b, 1) > 0 then
         begin
                 Int1Set := False;
-                RxDequeue := True;
-                b := RxQueue[RxQueueRead];
-                Inc(RxQueueRead);
-                RxQueueRead := RxQueueRead mod RXQUEUESIZE;
-                Dec(RxQueued);
-                Inc(RxQueueLeft);
+                Result := True;
                 CasioRxIncrement(1);
                 RefreshCounters;
         end;
@@ -284,19 +270,11 @@ begin
                 ClientTxLabel.Caption := IntToStr(ClientTxTotal);
                 CasioRxLabel.Caption := IntToStr(CasioRxTotal);
                 CasioTxLabel.Caption := IntToStr(CasioTxTotal);
-                QueueLabel.Caption := IntToStr(RxQueued)+'/'+IntToStr(RXQUEUESIZE);
-                QueueBar.Position := RxQueued;
+                QueueLabel.Caption := 'RX Queue: '+IntToStr(RxQueue.Count)+'/'+IntToStr(RXQUEUESIZE);
+                BufferLabel.Caption := 'Buffer: '+IntToStr(RxBuffer.Count)+'/'+IntToStr(RXBUFSIZE);
+                QueueBar.Position := RxQueue.Count;
+                BufferBar.Position := RXBuffer.Count;
         end;
-end;
-
-{ flush RX queue }
-procedure TSerialForm.RxQueueFlush;
-begin
-        RxQueued := 0;
-        RxQueueRead := 0;
-        RxQueueWrite := 0;
-        RxQueueLeft := RXQUEUESIZE;
-        RefreshCounters;
 end;
 
 { Blinken lights + counter increments }
@@ -338,17 +316,44 @@ begin
         SerialEnabled(True);
         Int1Set := False;
         Int1Enabled := False;
-        RxQueueFlush;
-        ClientRxTotal := 0;
-        ClientTxTotal := 0;
-        CasioRxTotal := 0;
-        CasioTxTotal := 0;
+        RxQueue := TBytePump.Create(RXQUEUESIZE);
+        RxBuffer:= TBytePump.Create(RXBUFSIZE);
+        RxQueue.SetFillLevel(DEFQFIL);
+        LinkPumps(RxBuffer, RxQueue);
+        RxQueue.ControlType := QCWait;
         QueueBar.Max := RXQUEUESIZE;
+        BufferBar.Max := RXBUFSIZE;
+
+        QueueLabel.Parent := QueueBar;
+        QueueLabel.AutoSize := False;
+        QueueLabel.Transparent := True;
+        QueueLabel.Top :=  0;
+        QueueLabel.Left :=  0;
+        QueueLabel.Width := QueueBar.ClientWidth;
+        QueueLabel.Height := QueueBar.ClientHeight;
+        QueueLabel.Alignment := taCenter;
+        QueueLabel.Layout := tlCenter;
+
+        BufferLabel.Parent := BufferBar;
+        BufferLabel.AutoSize := False;
+        BufferLabel.Transparent := True;
+        BufferLabel.Top :=  0;
+        BufferLabel.Left :=  0;
+        BufferLabel.Width := BufferBar.ClientWidth;
+        BufferLabel.Height := BufferBar.ClientHeight;
+        BufferLabel.Alignment := taCenter;
+        BufferLabel.Layout := tlCenter;
+
+        BufferLvl.Text := IntToStr(DEFQFIL);
+        BufferLvl.MaxLength := Length(BufferLvl.Text);
+
         RefreshCounters;
         LedTimer.Enabled := False;
         Height := _MinHeight;
         RxCapture := False;
         TxCapture := False;
+
+
 
     { this module only functions if we told the emulator we have an FA-7 ($00) or MD-100 ($55) }
     if ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) and (MainForm.SerialPort <> 0) then
@@ -423,7 +428,7 @@ end;
 { we have data to read - read all of it and enqueue }
 procedure TSerialForm.SerialSocketClientRead(Sender: TObject;
   Socket: TCustomWinSocket);
-var buf: array [0..RXBUFSIZE-1] of byte;
+var buf: array [0..SOCKBUFSIZE-1] of byte;
     len: integer;
 begin
   with SerialSocket.Socket do
@@ -431,11 +436,10 @@ begin
         if ActiveConnections > 0 then
         begin
                 repeat
-                        len:=Connections[0].ReceiveBuf(buf, RXBUFSIZE);
+                        len:=Connections[0].ReceiveBuf(buf, SOCKBUFSIZE);
                         if len > 0 then
                         begin
                                 RxEnqueue(buf, len);
-                                ClientRxIncrement(len);
                         end;
                 until len < 1;
         end;
@@ -446,7 +450,9 @@ end;
 { flush RX queue button clicked }
 procedure TSerialForm.QueueFlushClick(Sender: TObject);
 begin
-        RxQueueFlush;
+        RxQueue.Flush;
+        RxBuffer.Flush;
+        RefreshCounters;
 end;
 
 { delayed INT1 trigger }
@@ -543,6 +549,46 @@ begin
 end;
 
 { all she wrote }
+procedure TSerialForm.FormDestroy(Sender: TObject);
+begin
+
+        { unplumb the two, otherwise we need to free in reverse order to creating }
+        //RxQueue.Unplumb;
+        //RxBuffer.Unplumb;
+
+       // RxQueue.Free;
+        //RxBuffer.Free;
+
+end;
+
+procedure TSerialForm.rgPolicyClick(Sender: TObject);
+begin
+        case rgPolicy.ItemIndex of
+                0: rxQueue.ControlType := QcMaintain;
+                1: rxQueue.ControlType := QcWait;
+                2: rxQueue.ControlType := QcNone;
+        end;
+
+        BufferLvl.Enabled := (rgPolicy.ItemIndex <> 2);
+end;
+
+procedure TSerialForm.BufferLvlChange(Sender: TObject);
+        var i: integer;
+begin
+
+        i := StrToIntDef(BufferLvl.text,0);
+
+        if (i < 1) or (i > RXQUEUESIZE) then
+        begin
+                i := LastQfill;
+                BufferLvl.Text := IntToStr(i);
+        end
+        else begin
+                if i <> LastQFill then RxQueue.SetFillLevel(i);
+                LastQfill := i;
+        end;
+end;
+
 end.
 
 

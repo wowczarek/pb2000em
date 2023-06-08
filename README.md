@@ -1,4 +1,4 @@
-# Casio PB-2000C emulator Version 26-WO
+# Casio PB-2000C Emulator for Windows, version 26-WO
 
 This is the source for the enhanced version of Piotr Piątek's PB-2000C emulator written in / for Borland Delphi 5 and this branch corresponds to Piotr's V26 of the PB-2000C emulator.
 
@@ -6,58 +6,32 @@ PB-2000C is my platform of choice. While some items may or may not end up in eit
 
 This repository does NOT contain any of the Casio ROM images required for the emulator to function.
 
-The compiled pb2000c.exe or the contents of the .zip file from the Releases section (including - or not - the .ini file) can be copied into the location where extracted Piotr's emulator resides.
+The compiled pb2000c.exe or the contents of the .zip file from the Releases section (including - or not - the .ini file) can be copied into the location where the extracted Piotr's emulator resides.
 
 Author's official website is at: http://www.pisi.com.pl/piotr433/pb2000ee.htm
 
 The original sources reside in the branch: v26-piotr443
 
-## Main changes:
+## Main changes
 
-### Usability (keyboard):
+### Usability (keyboard)
 
 - Extensive list of keyboard shortcuts for various keys - keys to be finalised
 - Automatic prepending of keys requiring [s] key with [s], meaning you can enter ?!#{}$@ etc. without issues.
 - Keys which can be combined with [s] such as arrows, CLS etc., will also have [s] automatically prepended when pressed with Shift. If CLS = F12 then Shift-F12 executes [s] followed shortly by [cls].
 
-### Networked serial port emulation support via TCP
+### Serial port emulation
 
-Fuly working serial port emulation - baud rate and flow control are mostly ignored. Data can be sent and received via a TCP connection, and the state of INT1 masking / unmasking is tracked, so no data is sent to the PB until it opens its serial port. Serial data can also be peeked in both ASCII and hex, recorded to files (TODO), and files can be transmitted to the serial port (TODO). Supported both when emulating the presence of an FA-7 and an MD-100 (OptionCode setting or the new Interface setting). The serial port module operates a 1024-byte queue which is gradually emptied as PB-2000C reads the data. The plan is to implement a 64-kilobyte buffer in combination with the queue, with queue level monitoring that can maintain the queue at configurable certain maximum depth and move data from the buffer to the queue only once the queue is emptied. This will guarantee overrun-free operation at any speed, as long as you don't exceed the 64-kilobyte buffer backlog.
+Working RS-232C serial port emulation where data is exchanged via a TCP socket which can be accessed on the host locally (default) or from the outside. The state of INT1 masking / unmasking is tracked, so no data is forwarded to the PB-2000C until it opens its serial port. Baud rate is ignored and so is flow control, in favour of controlled RX queue management.
 
-Note: on the host side this isn't a serial port in the sense of a serial port. This is a TCP port where the emulator listens and passes input to the emulated PB-2000C's serial port and passes output to the TCP client. This can be set up as a serial port in your Windows system using any of the available "Virtual COM port" type drivers, although no baud rate negotiation or anything similar is done; it's a straight up TCP pipe. This was developed mostly to assist with the development of the PBNET project: https://github.com/wowczarek/pbnet - but can of course be used by any application you may want to develop, or can be used with the likes of netcat / socat to send files.
+Serial data can be peeked in both ASCII and hex, recorded to files (TODO), and files can be transmitted to the serial port (TODO). Supported both when emulating the presence of an FA-7 and an MD-100 (OptionCode setting or the new Interface setting). The serial port module operates a 1024-byte queue which is gradually emptied as PB-2000C reads the data. The plan is to implement a 64-kilobyte buffer in combination with the queue, with queue level monitoring that can maintain the queue at configurable certain maximum depth and move data from the buffer to the queue only once the queue is emptied or drops below the maximum fill level. This will guarantee overrun-free operation at maximum speed, as long as you don't exceed a backlog of 64 kilobytes.
 
-### New .ini file settings:
+The host side obviously isn't a serial port in the sense of a serial port. This is a TCP socket where the emulator listens, passing input to the emulated PB-2000C's serial port and passing output to the TCP client. This can be set up as a serial port in your Windows system using any of the available "Virtual COM port" type drivers, if you really need this to be a serial port, although no baud rate negotiation or anything similar will be done unless the virtual serial port does that - it's a straight up TCP pipe. This was developed mostly to assist with the development of the PBNET project: https://github.com/wowczarek/pbnet - but can of course be used by any application you may want to develop, or can be used with the likes of netcat / socat to send files.
 
-```ini
-[Settings]
-;         Instead of OptionCode = 0, but OptionCode can still be set and takes precedence
-;         This will enable the PB-2000C to see RS232C (working) and MT (not working):
-;Interface=FA-7
+### pb2000c.ini with all supported settings
 
-;         Instead of OptionCode = 85, but OptionCode can still be set and takes precedence
-;         This will enable the PB-2000C to see RS232C (working) and floppy disk - if connected to the MD-100 emulator:
-;Interface=MD-100
 
-; New section
-[Serial]
-;		  Serial port emulation is enabled if a TCP listen port is set:
-; Port=7777
-;		  If port is configured, emulator will by default listen on ANY / all addresses (0.0.0.0), but can and should be set to e.g. localhost (127.0.0.1)
-; Listen=0.0.0.0
-
-; New section
-[Remote]
-;		  Remote control is enabled if a TCP listen port is set:
-; Port=7778
-;		  If port is configured, emulator will by default listen on ANY / all addresses (0.0.0.0), but can and should be set to e.g. localhost (127.0.0.1)
-; Listen=0.0.0.0
-;		  Key entry interval in milliseconds - this is effectively the key repetition rate and key release runs at half this interval. Minimum 10 ms.
-;         Setting the interval too short may result in missed keys. Default is 50 ms which is slow, but works fine.
-;		  Note: remote commands and requests (see below) are not timed or queued, but are executed immediately.
-; Interval=50
-```
-
-### Remote control protocol:
+### Remote control protocol
 
 A TCP-based remote control protocol was added with a simple but extensive command parser. It is part-ASCII, part-binary, where command entry is exclusively ASCII which makes it possible to comfortably use it via e.g. a raw telnet or netcat session.
 

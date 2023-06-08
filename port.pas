@@ -20,11 +20,10 @@ interface
 
 implementation
 
-  uses Def, Main, SysUtils,Serial;
+  uses Def, Main, Serial;
 
 var
-  RegRdData, RegWrData, FddWrData, FddRdData, SerialWrData, SerialRdData, OldPort: byte;
-  SerialRxBuffer: Array[0..255] of byte;
+  RegRdData, {RegWrData,} FddWrData, FddRdData, SerialWrData, SerialRdData, OldPort: byte;
 
 function GetPort: byte;
 begin
