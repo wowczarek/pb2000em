@@ -1,6 +1,6 @@
 object SerialForm: TSerialForm
-  Left = 199
-  Top = 271
+  Left = 135
+  Top = 282
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Serial Port Monitor'
@@ -29,12 +29,21 @@ object SerialForm: TSerialForm
     Width = 3
     Height = 13
   end
-  object Label5: TLabel
-    Left = 181
+  object BufferLvlLabel: TLabel
+    Left = 299
     Top = 107
-    Width = 53
+    Width = 51
     Height = 13
-    Caption = 'Queue fill:'
+    Caption = 'Block size:'
+    Enabled = False
+  end
+  object BlockDelayLabel: TLabel
+    Left = 402
+    Top = 107
+    Width = 52
+    Height = 13
+    Caption = 'Delay (ms):'
+    Enabled = False
   end
   object PBMonitor: TGroupBox
     Left = 8
@@ -88,9 +97,9 @@ object SerialForm: TSerialForm
     object PBOpenPanel: TPanel
       Left = 47
       Top = 19
-      Width = 105
+      Width = 64
       Height = 25
-      Caption = 'Port Closed (INT1)'
+      Caption = 'INT1'
       Color = clRed
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clSilver
@@ -99,6 +108,14 @@ object SerialForm: TSerialForm
       Font.Style = []
       ParentFont = False
       TabOrder = 2
+    end
+    object XoffPanel: TPanel
+      Left = 116
+      Top = 19
+      Width = 39
+      Height = 25
+      Caption = 'XOFF'
+      TabOrder = 3
     end
   end
   object ClientMonitor: TGroupBox
@@ -186,16 +203,16 @@ object SerialForm: TSerialForm
     object QueueFlush: TButton
       Left = 8
       Top = 57
-      Width = 68
+      Width = 41
       Height = 25
       Caption = 'Flush'
       TabOrder = 0
       OnClick = QueueFlushClick
     end
     object CntReset: TButton
-      Left = 80
+      Left = 88
       Top = 57
-      Width = 68
+      Width = 60
       Height = 25
       Caption = 'Res. Cnt.'
       TabOrder = 2
@@ -211,11 +228,23 @@ object SerialForm: TSerialForm
       Smooth = True
       TabOrder = 3
     end
+    object EofBtn: TButton
+      Left = 52
+      Top = 57
+      Width = 33
+      Height = 25
+      Hint = 'Send EOF byte'
+      Caption = 'EOF'
+      ParentShowHint = False
+      ShowHint = False
+      TabOrder = 4
+      OnClick = EofBtnClick
+    end
   end
   object BtnToggle: TButton
     Left = 8
     Top = 103
-    Width = 161
+    Width = 128
     Height = 21
     Caption = 'More...'
     Font.Charset = DEFAULT_CHARSET
@@ -357,35 +386,43 @@ object SerialForm: TSerialForm
       OnClick = TxCaptureClearClick
     end
   end
-  object rgPolicy: TRadioGroup
-    Left = 336
-    Top = 97
-    Width = 159
-    Height = 33
-    Caption = 'Queue Policy:'
-    Columns = 3
-    Font.Charset = DEFAULT_CHARSET
-    Font.Color = clWindowText
-    Font.Height = -11
-    Font.Name = 'MS Sans Serif'
-    Font.Style = []
-    ItemIndex = 0
-    Items.Strings = (
-      'Wait'
-      'Level'
-      'None')
-    ParentFont = False
-    TabOrder = 6
-    OnClick = rgPolicyClick
-  end
   object BufferLvl: TEdit
-    Left = 237
+    Left = 356
     Top = 104
-    Width = 93
+    Width = 41
     Height = 21
-    TabOrder = 7
-    Text = '224'
+    Enabled = False
+    TabOrder = 6
+    Text = '32'
     OnChange = BufferLvlChange
+  end
+  object BlockDelay: TEdit
+    Left = 456
+    Top = 104
+    Width = 39
+    Height = 21
+    Enabled = False
+    TabOrder = 7
+    Text = '100'
+    OnChange = BlockDelayChange
+  end
+  object cbBlocks: TCheckBox
+    Left = 221
+    Top = 106
+    Width = 69
+    Height = 17
+    Caption = 'Block xfer'
+    TabOrder = 8
+    OnClick = cbBlocksClick
+  end
+  object cbXonXoff: TCheckBox
+    Left = 142
+    Top = 106
+    Width = 77
+    Height = 17
+    Caption = 'XOFF/XON'
+    TabOrder = 9
+    OnClick = cbXonXoffClick
   end
   object LedTimer: TTimer
     Interval = 300
