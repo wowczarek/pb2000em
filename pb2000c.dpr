@@ -23,6 +23,7 @@ uses
 begin
   Application.Initialize;
   Application.Title := 'Casio PB-2000C Emulator';
+  Application.HintPause := 100;
   Application.CreateForm(TMainForm, MainForm);
   Application.CreateForm(TDebugForm, DebugForm);
   Application.CreateForm(TSerialForm, SerialForm);
