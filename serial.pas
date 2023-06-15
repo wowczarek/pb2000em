@@ -6,14 +6,17 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, ScktComp, ComCtrls, ThdTimer, Utils;
+  StdCtrls, ExtCtrls, ScktComp, ComCtrls, ThdTimer, Utils, ShellAPI;
 
 const
 
- SOCKBUFSIZE = 1024;   { TCP maximum grabbable chunk }
- RXQUEUESIZE = 1024;   { serial port max queue depth }
- RXBUFSIZE =  65535;   { accumulating buffer max size }
- DEFQFIL =      224;   { fill level default }
+ SOCKBUFSIZE = 1024;  { TCP maximum grabbable chunk }
+ RXQUEUESIZE = 256;   { serial port max queue depth }
+ RXBUFSIZE =  65535;  { accumulating buffer max size }
+ DEFQFIL =      32;   { fill level / block size default }
+ DEFDELAY =     100;  { default block delay }
+ XONB =         $11;  { XON byte }
+ XOFFB =        $13;  { XOFF byte }
 
  _MinHeight = 158; { simplistic window state info for toggling the 'more' section }
  _MaxHeight = 330;
@@ -58,9 +61,14 @@ type
     BufferBar: TProgressBar;
     QueueLabel: TLabel;
     BufferLabel: TLabel;
-    rgPolicy: TRadioGroup;
     BufferLvl: TEdit;
-    Label5: TLabel;
+    BufferLvlLabel: TLabel;
+    BlockDelayLabel: TLabel;
+    BlockDelay: TEdit;
+    cbBlocks: TCheckBox;
+    EofBtn: TButton;
+    XoffPanel: TPanel;
+    cbXonXoff: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure RefreshCounters;
     procedure LedTimerTimer(Sender: TObject);
@@ -75,7 +83,7 @@ type
     procedure CasioRxIncrement(count: Integer);
     procedure CasioTxIncrement(count: Integer);
     procedure CaptureByte(var amemo: TMemo; var hmemo: TMemo; b: byte);
-    procedure RxEnqueue(var buf: array of byte; len: integer);
+    procedure RxEnqueue(buf: array of byte; len: integer);
     procedure QueueFlushClick(Sender: TObject);
     procedure Int1TimerTimer(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -92,11 +100,13 @@ type
     procedure RxCaptureStartClick(Sender: TObject);
     procedure TxCaptureStartClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure rgPolicyClick(Sender: TObject);
     procedure BufferLvlChange(Sender: TObject);
+    procedure cbBlocksClick(Sender: TObject);
+    procedure BlockDelayChange(Sender: TObject);
+    procedure EofBtnClick(Sender: TObject);
+    procedure cbXonXoffClick(Sender: TObject);
   private
     { Private declarations }
-
         { counters }
         ClientRxTotal: Integer;
         ClientTxTotal: Integer;
@@ -109,10 +119,18 @@ type
         { host notification / readiness flags }
         Int1Enabled: Boolean;
         Int1Set: Boolean;
-
+        _XonWait: Boolean;
+        XoffEnabled: Boolean;
         { is this thing on? }
         Enabled: Boolean;
-
+        procedure SetXonWait(x: Boolean);
+        property XonWait: Boolean read _XonWait write SetXonWait;
+        procedure DataReady(Sender: TObject);
+        procedure SendFile(fn: array of char);
+        procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;
+  protected
+        procedure CreateWnd; override;
+        procedure DestroyWnd; override;
   public
     { Public declarations }
         RxCapture: Boolean;
@@ -129,12 +147,73 @@ type
 
 var
   SerialForm: TSerialForm;
-  LastQfill: integer = DEFQFIL;
 implementation
 
 uses Def, Cpu, Port, Main;
 
 {$R *.DFM}
+
+procedure TSerialForm.SetXonWait(x: Boolean);
+begin
+        { resume transfer if we now ignore xoff/xon }
+        if _XonWait and (not x) then RxPoll(false);
+        _XonWait := x;
+
+        if x then
+        begin
+                XoffPanel.Color := clBlue;
+                XoffPanel.Font.Color := clWhite;
+        end else
+        begin
+                XoffPanel.Color := clBtnFace;
+                XoffPanel.Font.Color := clWindowText;
+
+        end;
+
+end;
+
+procedure TSerialForm.SendFile(fn: array of char);
+var
+  f: file;
+  n: integer;
+  buf: array [0..65535] of byte;
+begin
+    AssignFile (f, fn);
+    Reset (f, 1);
+    BlockRead(f, buf[0], 65535, n);
+    CloseFile (f);
+    if n > 0 then
+    begin
+        RxEnqueue(buf, n);
+    end;
+end;
+
+procedure TSerialForm.WMDropFiles(var Msg: TWMDropFiles);
+var
+        FileCount: Integer;
+        FileName: array[0..MAX_PATH] of Char;
+begin
+        FillChar(FileName, MAX_PATH + 1, $00);
+        FileCount := DragQueryFile(Msg.Drop, $FFFFFFFF, nil, 0);
+        if FileCount > 0 then
+        begin
+                DragQueryFile(Msg.Drop, 0, FileName, MAX_PATH);
+                SendFile(FileName);
+        end;
+        DragFinish(Msg.Drop);
+end;
+
+procedure TSerialForm.CreateWnd;
+begin
+  inherited;
+  DragAcceptFiles(WindowHandle, True);
+end;
+
+procedure TSerialForm.DestroyWnd;
+begin
+  DragAcceptFiles(WindowHandle, false);
+  inherited;
+end;
 
 { capture a byte of data into an Ascii and Hex TMemo  pair }
 procedure TSerialForm.CaptureByte(var amemo: TMemo; var hmemo: TMemo; b: byte);
@@ -172,18 +251,24 @@ end;
 procedure TSerialForm.PBOpened(opened: Boolean);
 begin
 
+
         if Int1Enabled = opened then exit;
+
+        XonWait := False;
 
         if opened then
         begin
+
               RxPoll(true);
               PBOpenPanel.Color := clGreen;
-              PBOpenPanel.Caption := 'Port Open (INT1)';
+{ revisit INT1 panel status text }
+{              PBOpenPanel.Caption := 'Port Open (INT1)'; }
               PBOpenPanel.Font.Color := clWhite;
         end else
         begin
               PBOpenPanel.Color := clRed;
-              PBOpenPanel.Caption := 'Port Closed (INT1)';
+{ revisit INT1 panel status text }
+{              PBOpenPanel.Caption := 'Port Closed (INT1)'; }
               PBOpenPanel.Font.Color := clSilver;
 
         end;
@@ -195,7 +280,7 @@ end;
 procedure TSerialForm.RxPoll(delayed: Boolean);
 begin
 
-  if RxQueue.Count > 0 then
+ if (RxQueue.Count > 0) and (not XonWait) then
  begin
        if delayed then
        begin
@@ -212,6 +297,26 @@ end;
 { transmit a byte of data to the outside world }
 procedure TSerialForm.TxByte(b: byte);
 begin
+  if XoffEnabled then
+  begin
+
+        if b = XONB then
+        begin
+                if XonWait then
+                begin
+                        XonWait := False;
+                        RxPoll(false);
+                end;
+                exit;
+        end;
+
+        if b = XOFFB then
+        begin
+                XonWait := True;
+                exit;
+        end;
+  end;
+
         with SerialSocket.Socket do
         begin
                 if ActiveConnections = 1 then
@@ -221,37 +326,41 @@ begin
         end;
 
         if TxCapture then CaptureByte(CasioTxAsc, CasioTxHex, b);
-
         CasioTxIncrement(1);
 end;
 
 { queue an incoming chunk of data onto the RxQueue ring buffer }
-procedure TSerialForm.RxEnqueue(var buf: array of byte; len: integer);
+procedure TSerialForm.RxEnqueue(buf: array of byte; len: integer);
 var
         i,res: integer;
 begin
 
+        if len < 1 then exit;
         if not Enabled then exit;
 
-        res := RxBuffer.Enqueue(buf,len);
+        res := RxBuffer.Enqueue(buf[0],len);
 
-        RxPoll(false);
         ClientRxIncrement(res);
         RefreshCounters;
 
         if RxCapture then
         begin
                 for i := 0 to len - 1 do
+                begin
                         CaptureByte(CasioRxAsc, CasioRxHex, buf[i]);
+                end;
         end;
 end;
 
 { read a byte from the RxQueue ring buffer into b - the PB does this byte by byte }
 function TSerialForm.RxDequeue(var b: byte): Boolean;
+var
+        buf: array [0..1] of byte;
 begin
         Result := False;
-        if RxQueue.Dequeue(b, 1) > 0 then
+        if RxQueue.Dequeue(buf, 1) > 0 then
         begin
+                b := buf[0];
                 Int1Set := False;
                 Result := True;
                 CasioRxIncrement(1);
@@ -271,7 +380,7 @@ begin
                 CasioRxLabel.Caption := IntToStr(CasioRxTotal);
                 CasioTxLabel.Caption := IntToStr(CasioTxTotal);
                 QueueLabel.Caption := 'RX Queue: '+IntToStr(RxQueue.Count)+'/'+IntToStr(RXQUEUESIZE);
-                BufferLabel.Caption := 'Buffer: '+IntToStr(RxBuffer.Count)+'/'+IntToStr(RXBUFSIZE);
+                BufferLabel.Caption := 'RX Buffer: '+IntToStr(RxBuffer.Count)+'/'+IntToStr(RXBUFSIZE);
                 QueueBar.Position := RxQueue.Count;
                 BufferBar.Position := RXBuffer.Count;
         end;
@@ -310,17 +419,29 @@ begin
         RefreshCounters;
 end;
 
+procedure TSerialForm.DataReady(Sender: TObject);
+begin
+        RxPoll(false);
+end;
+
 { initialisation tasks }
 procedure TSerialForm.FormCreate(Sender: TObject);
 begin
         SerialEnabled(True);
         Int1Set := False;
         Int1Enabled := False;
+        XonWait := False;
         RxQueue := TBytePump.Create(RXQUEUESIZE);
         RxBuffer:= TBytePump.Create(RXBUFSIZE);
-        RxQueue.SetFillLevel(DEFQFIL);
-        LinkPumps(RxBuffer, RxQueue);
-        RxQueue.ControlType := QCWait;
+        RxBuffer.Name := 'buf';
+        RxQueue.Name := 'que';
+        RxQueue.FillLevel := DEFQFIL;
+        RxQueue.Source(RxBuffer);
+        RxQueue.QueuePolicy := QPWait;
+        cbBlocks.Checked := True;
+        cbBlocks.OnClick(nil);
+        RxQueue.Delay := DEFDELAY;
+        RxQueue.OnReady := DataReady;
         QueueBar.Max := RXQUEUESIZE;
         BufferBar.Max := RXBUFSIZE;
 
@@ -344,16 +465,14 @@ begin
         BufferLabel.Alignment := taCenter;
         BufferLabel.Layout := tlCenter;
 
-        BufferLvl.Text := IntToStr(DEFQFIL);
-        BufferLvl.MaxLength := Length(BufferLvl.Text);
+        BufferLvl.Text := IntToStr(RxQueue.FillLevel);
+        BlockDelay.Text := IntToStr(RxQueue.Delay);
 
         RefreshCounters;
         LedTimer.Enabled := False;
         Height := _MinHeight;
         RxCapture := False;
         TxCapture := False;
-
-
 
     { this module only functions if we told the emulator we have an FA-7 ($00) or MD-100 ($55) }
     if ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) and (MainForm.SerialPort <> 0) then
@@ -436,7 +555,7 @@ begin
         if ActiveConnections > 0 then
         begin
                 repeat
-                        len:=Connections[0].ReceiveBuf(buf, SOCKBUFSIZE);
+                        len:=Connections[0].ReceiveBuf(buf[0], SOCKBUFSIZE);
                         if len > 0 then
                         begin
                                 RxEnqueue(buf, len);
@@ -450,8 +569,7 @@ end;
 { flush RX queue button clicked }
 procedure TSerialForm.QueueFlushClick(Sender: TObject);
 begin
-        RxQueue.Flush;
-        RxBuffer.Flush;
+        RxBuffer.Purge;
         RefreshCounters;
 end;
 
@@ -466,6 +584,7 @@ end;
 { refresh counters and restart LEDs when form shows }
 procedure TSerialForm.FormShow(Sender: TObject);
 begin
+        DragAcceptFiles(Self.Handle, True);
         LedTimer.Enabled := True;
         RefreshCounters;
 end;
@@ -561,16 +680,6 @@ begin
 
 end;
 
-procedure TSerialForm.rgPolicyClick(Sender: TObject);
-begin
-        case rgPolicy.ItemIndex of
-                0: rxQueue.ControlType := QcMaintain;
-                1: rxQueue.ControlType := QcWait;
-                2: rxQueue.ControlType := QcNone;
-        end;
-
-        BufferLvl.Enabled := (rgPolicy.ItemIndex <> 2);
-end;
 
 procedure TSerialForm.BufferLvlChange(Sender: TObject);
         var i: integer;
@@ -580,13 +689,59 @@ begin
 
         if (i < 1) or (i > RXQUEUESIZE) then
         begin
-                i := LastQfill;
+                i := DEFQFIL;
                 BufferLvl.Text := IntToStr(i);
-        end
-        else begin
-                if i <> LastQFill then RxQueue.SetFillLevel(i);
-                LastQfill := i;
         end;
+
+        RxQueue.FillLevel := i;
+end;
+
+
+procedure TSerialForm.cbBlocksClick(Sender: TObject);
+begin
+        if cbBlocks.Checked then begin
+                RxQueue.QueuePolicy := QPWait;
+        end else begin
+                RxQueue.QueuePolicy := QPNone;
+        end;
+
+        BufferLvl.Enabled := cbBlocks.Checked;
+        BlockDelay.Enabled := cbBlocks.Checked;
+        BufferLvlLabel.Enabled := cbBlocks.Checked;
+        BlockDelayLabel.Enabled := cbBlocks.Checked;
+
+end;
+
+procedure TSerialForm.BlockDelayChange(Sender: TObject);
+        var i: integer;
+begin
+
+        i := StrToIntDef(BlockDelay.text,0);
+
+        if (i < 0) then
+        begin
+                i := DEFDELAY;
+                BlockDelay.Text := IntToStr(i);
+        end;
+
+        RxQueue.Delay := i;
+end;
+
+procedure TSerialForm.EofBtnClick(Sender: TObject);
+var
+        eofb: array [0..1] of byte;
+begin
+
+        eofb[0] := $1a;
+        RxEnqueue(eofb, 1);
+
+end;
+
+
+procedure TSerialForm.cbXonXoffClick(Sender: TObject);
+begin
+        XoffEnabled := cbXonXoff.Checked;
+        if not XoffEnabled then XonWait := False;
 end;
 
 end.
