@@ -15,13 +15,15 @@ uses
   Decoder in 'decoder.pas',
   Exec in 'exec.pas',
   Serial in 'serial.pas' {SerialForm},
-  Remote in 'remote.pas' {RemoteForm};
+  Remote in 'remote.pas' {RemoteForm},
+  utils in 'utils.pas';
 
 {$R *.res}
 
 begin
   Application.Initialize;
   Application.Title := 'Casio PB-2000C Emulator';
+  Application.HintPause := 100;
   Application.CreateForm(TMainForm, MainForm);
   Application.CreateForm(TDebugForm, DebugForm);
   Application.CreateForm(TSerialForm, SerialForm);

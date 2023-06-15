@@ -1,6 +1,6 @@
 object SerialForm: TSerialForm
-  Left = 199
-  Top = 271
+  Left = 135
+  Top = 282
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Serial Port Monitor'
@@ -17,6 +17,7 @@ object SerialForm: TSerialForm
   KeyPreview = True
   OldCreateOrder = False
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   OnHide = FormHide
   OnKeyDown = FormKeyDown
   OnShow = FormShow
@@ -28,35 +29,51 @@ object SerialForm: TSerialForm
     Width = 3
     Height = 13
   end
+  object BufferLvlLabel: TLabel
+    Left = 299
+    Top = 107
+    Width = 51
+    Height = 13
+    Caption = 'Block size:'
+    Enabled = False
+  end
+  object BlockDelayLabel: TLabel
+    Left = 402
+    Top = 107
+    Width = 52
+    Height = 13
+    Caption = 'Delay (ms):'
+    Enabled = False
+  end
   object PBMonitor: TGroupBox
     Left = 8
     Top = 8
-    Width = 169
+    Width = 161
     Height = 89
     Caption = 'Casio'
     TabOrder = 0
     object Label3: TLabel
-      Left = 52
+      Left = 47
       Top = 48
       Width = 45
       Height = 13
-      Caption = 'Total RX:'
+      Caption = 'RX Total:'
     end
     object Label4: TLabel
-      Left = 52
+      Left = 47
       Top = 64
       Width = 44
       Height = 13
-      Caption = 'Total TX:'
+      Caption = 'TX Total:'
     end
     object CasioRxLabel: TLabel
-      Left = 102
+      Left = 97
       Top = 48
       Width = 3
       Height = 13
     end
     object CasioTxLabel: TLabel
-      Left = 102
+      Left = 97
       Top = 64
       Width = 3
       Height = 13
@@ -78,11 +95,11 @@ object SerialForm: TSerialForm
       TabOrder = 1
     end
     object PBOpenPanel: TPanel
-      Left = 52
+      Left = 47
       Top = 19
-      Width = 105
+      Width = 64
       Height = 25
-      Caption = 'Port Closed (INT1)'
+      Caption = 'INT1'
       Color = clRed
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clSilver
@@ -92,42 +109,50 @@ object SerialForm: TSerialForm
       ParentFont = False
       TabOrder = 2
     end
+    object XoffPanel: TPanel
+      Left = 116
+      Top = 19
+      Width = 39
+      Height = 25
+      Caption = 'XOFF'
+      TabOrder = 3
+    end
   end
   object ClientMonitor: TGroupBox
-    Left = 328
+    Left = 335
     Top = 8
-    Width = 169
+    Width = 161
     Height = 89
     Caption = 'TCP Client'
     TabOrder = 1
     object Label1: TLabel
-      Left = 51
+      Left = 46
       Top = 48
       Width = 45
       Height = 13
-      Caption = 'Total RX:'
+      Caption = 'RX Total:'
     end
     object Label2: TLabel
-      Left = 51
+      Left = 46
       Top = 64
       Width = 44
       Height = 13
-      Caption = 'Total TX:'
+      Caption = 'TX Total:'
     end
     object ClientRxLabel: TLabel
-      Left = 99
+      Left = 94
       Top = 48
       Width = 3
       Height = 13
     end
     object ClientTxLabel: TLabel
-      Left = 99
+      Left = 94
       Top = 64
       Width = 3
       Height = 13
     end
     object ClientConnectedPanel: TPanel
-      Left = 52
+      Left = 47
       Top = 19
       Width = 105
       Height = 25
@@ -159,58 +184,67 @@ object SerialForm: TSerialForm
     end
   end
   object QueueMonitor: TGroupBox
-    Left = 184
+    Left = 175
     Top = 8
-    Width = 137
+    Width = 155
     Height = 89
-    Caption = 'RX Queue'
+    Caption = 'RX Buffering'
     TabOrder = 2
-    object Label5: TLabel
-      Left = 8
-      Top = 40
-      Width = 41
-      Height = 13
-      Caption = 'Queued:'
-    end
-    object QueueLabel: TLabel
-      Left = 56
-      Top = 40
-      Width = 3
-      Height = 13
-    end
-    object QueueFlush: TButton
-      Left = 8
-      Top = 56
-      Width = 57
-      Height = 25
-      Caption = 'Flush Q'
-      TabOrder = 0
-      OnClick = QueueFlushClick
-    end
     object QueueBar: TProgressBar
       Left = 8
-      Top = 18
-      Width = 121
+      Top = 36
+      Width = 140
       Height = 17
       Min = 0
       Max = 1024
       Smooth = True
       TabOrder = 1
     end
+    object QueueFlush: TButton
+      Left = 8
+      Top = 57
+      Width = 41
+      Height = 25
+      Caption = 'Flush'
+      TabOrder = 0
+      OnClick = QueueFlushClick
+    end
     object CntReset: TButton
-      Left = 72
-      Top = 56
-      Width = 57
+      Left = 88
+      Top = 57
+      Width = 60
       Height = 25
       Caption = 'Res. Cnt.'
       TabOrder = 2
       OnClick = CntResetClick
     end
+    object BufferBar: TProgressBar
+      Left = 8
+      Top = 18
+      Width = 140
+      Height = 17
+      Min = 0
+      Max = 65535
+      Smooth = True
+      TabOrder = 3
+    end
+    object EofBtn: TButton
+      Left = 52
+      Top = 57
+      Width = 33
+      Height = 25
+      Hint = 'Send EOF byte'
+      Caption = 'EOF'
+      ParentShowHint = False
+      ShowHint = False
+      TabOrder = 4
+      OnClick = EofBtnClick
+    end
   end
   object BtnToggle: TButton
     Left = 8
     Top = 103
-    Width = 489
+    Width = 128
     Height = 21
     Caption = 'More...'
     Font.Charset = DEFAULT_CHARSET
@@ -224,12 +258,28 @@ object SerialForm: TSerialForm
   end
   object GbRx: TGroupBox
     Left = 8
-    Top = 125
+    Top = 128
     Width = 241
     Height = 172
     Caption = 'RX data'
     TabOrder = 4
     Visible = False
+    object QueueLabel: TLabel
+      Left = 128
+      Top = 48
+      Width = 58
+      Height = 13
+      Caption = 'QueueLabel'
+    end
+    object BufferLabel: TLabel
+      Left = 136
+      Top = 80
+      Width = 54
+      Height = 13
+      Caption = 'BufferLabel'
+      Color = clBtnFace
+      ParentColor = False
+    end
     object RxCaptureStart: TButton
       Left = 8
       Top = 141
@@ -281,7 +331,7 @@ object SerialForm: TSerialForm
   end
   object GbTx: TGroupBox
     Left = 256
-    Top = 125
+    Top = 128
     Width = 241
     Height = 172
     Caption = 'TX data'
@@ -335,6 +385,44 @@ object SerialForm: TSerialForm
       TabOrder = 3
       OnClick = TxCaptureClearClick
     end
+  end
+  object BufferLvl: TEdit
+    Left = 356
+    Top = 104
+    Width = 41
+    Height = 21
+    Enabled = False
+    TabOrder = 6
+    Text = '32'
+    OnChange = BufferLvlChange
+  end
+  object BlockDelay: TEdit
+    Left = 456
+    Top = 104
+    Width = 39
+    Height = 21
+    Enabled = False
+    TabOrder = 7
+    Text = '100'
+    OnChange = BlockDelayChange
+  end
+  object cbBlocks: TCheckBox
+    Left = 221
+    Top = 106
+    Width = 69
+    Height = 17
+    Caption = 'Block xfer'
+    TabOrder = 8
+    OnClick = cbBlocksClick
+  end
+  object cbXonXoff: TCheckBox
+    Left = 142
+    Top = 106
+    Width = 77
+    Height = 17
+    Caption = 'XOFF/XON'
+    TabOrder = 9
+    OnClick = cbXonXoffClick
   end
   object LedTimer: TTimer
     Interval = 300
