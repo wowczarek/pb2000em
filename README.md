@@ -24,11 +24,6 @@ Serial data can be peeked in both ASCII and hex, recorded to files (TODO), and f
 
 The host side obviously isn't a serial port in the sense of a serial port. This is a TCP socket where the emulator listens, passing input to the emulated PB-2000C's serial port and passing output to the TCP client. This can be set up as a serial port in your Windows system using any of the available "Virtual COM port" type drivers, if you really need this to be a serial port, although no baud rate negotiation or anything similar will be done unless the virtual serial port does that - it's a straight up TCP pipe. This was developed mostly to assist with the development of the PBNET project: https://github.com/wowczarek/pbnet - but can of course be used by any application you may want to develop, or can be used with the likes of netcat / socat to send files.
 
-### pb2000c.ini with all supported settings
-
-https://github.com/wowczarek/pb2000em/blob/5cec33b42d2d4356e42b9ea02c64a62ef78f7ebb/pb2000c.ini
-
-
 ### Remote control protocol
 
 A TCP-based remote control protocol was added with a simple but extensive command parser. It is part-ASCII, part-binary, where command entry is exclusively ASCII which makes it possible to comfortably use it via e.g. a raw telnet or netcat 
@@ -82,6 +77,11 @@ A new connection is greeted by sending a string `EMHELLO` to the client. Simple 
 | Up / Dn / Left / Right \*| ditto |
 
 \* - Keys which can be combined with `[s]` such as arrows, CLS etc., will also have `[s]` automatically prepended when pressed with Shift. If CLS = F12 then Shift-F12 executes `[s]` followed shortly by `[cls]`.
+
+### pb2000c.ini with all supported settings (old and new):
+
+https://github.com/wowczarek/pb2000em/blob/v26-wo/pb2000c.ini
+
 
 ## Any Other Business / notes
 
