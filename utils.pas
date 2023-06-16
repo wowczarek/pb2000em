@@ -9,14 +9,15 @@ type
 
   TQueuePolicy = ( QPNone, QPWait );
 
-  { The Byte Pump is a FIFO queue, which can be chained with another two queues,        }
-  { in a sink-source fashion:                                                           }
-  {     - when data is dequeued from a sink, it will pull more from its source,         }
-  {     - when data is enqueued to a source, it will push some of it to the sink        }
-  { when and how much of the push / pull is done, depends on queue control mode:        }
-  {     - QPNone:       propagate immediately                                           }
-  {     - QPWait:       sink is only filled when sink it gets emptied, after an optional delay }
-  { when no sink or source is defined, it works like a regular, single FIFO queue       }
+  { The Byte Pump is a FIFO queue, which can be chained with another two queues,  }
+  { in a sink-source fashion:                                                     }
+  {     - when data is dequeued from a sink, it will pull more from its source    }
+  {     - when data is enqueued to a source, it cause the sink to pull data       }
+  { when and how much of the push / pull is done, depends on queue control mode:  }
+  {     - QPNone:       propagate immediately                                     }
+  {     - QPWait:       sink is only filled when sink it gets emptied, after an   }
+  {       optional delay                                                          }
+  { when no sink or source is defined, it works like a regular, single FIFO queue }
 
   TBytePump = class
   private
@@ -25,24 +26,24 @@ type
         { ring buffer }
         Data : Array of byte;
         { cogs }
-        _Capacity: Integer;
-        _Count: Integer;
-        _Left: Integer;
+        FCapacity: Integer;
+        FCount: Integer;
+        FLeft: Integer;
         ReadPos: Integer;
         WritePos: Integer;
-        _FillLevel: Integer;
-        _Source: TBytePump;
-        _Sink: TBytePump;
-        _Delay: Integer;
-        _Ready: Boolean;
+        FFillLevel: Integer;
+        FSource: TBytePump;
+        FSink: TBytePump;
+        FDelay: Integer;
+        FReady: Boolean;
         Waiting: Boolean;
         Timer: TThreadedTimer;
         WakeUpTimer: TTHreadedTimer;
         procedure SetFillLevel(l: integer);
         procedure SetDelay(d: integer);
         { the actual moving of data, but without pumping }
-        function _Enqueue(var src: array of byte; len: Integer): Integer;
-        function _Dequeue(var dst: array of byte; len: Integer): Integer;
+        function FEnqueue(var src: array of byte; len: Integer): Integer;
+        function FDequeue(var dst: array of byte; len: Integer): Integer;
         { pump from source }
         procedure Pump;
         procedure OnTimer(Sender: TObject);
@@ -63,12 +64,12 @@ type
         procedure UnplumbSource;
         procedure UnplumbSink;
         procedure Unplumb;
-        property Capacity: Integer read _Capacity;
-        property Count: Integer read _Count;
-        property Left: Integer read _Left;
-        property FillLevel: Integer read _FillLevel write SetFillLevel;
-        property Delay: Integer read _Delay write SetDelay;
-        property Ready: Boolean read _Ready;
+        property Capacity: Integer read FCapacity;
+        property Count: Integer read FCount;
+        property Left: Integer read FLeft;
+        property FillLevel: Integer read FFillLevel write SetFillLevel;
+        property Delay: Integer read FDelay write SetDelay;
+        property Ready: Boolean read FReady;
         constructor Create(Capacity: Integer);
         destructor  Destroy; override;
   end;
@@ -83,8 +84,8 @@ begin
 
    { do not allow a closed loop - TODO: walk the whole pipage and detect loops }
    if Sink = Source then exit;
-   Source._Sink := Sink;
-   Sink._Source := Source;
+   Source.FSink := Sink;
+   Sink.FSource := Source;
 
 end;
 
@@ -93,42 +94,42 @@ procedure UnlinkPumps(a: TBytePump; b: TBytePump);
 begin
 
 
-        if (a._Source = b) and (b._Sink = a)
+        if (a.FSource = b) and (b.FSink = a)
         then begin
-                a._Source := Nil;
-                b._Sink := Nil;
+                a.FSource := Nil;
+                b.FSink := Nil;
         end;
 
-        if (a._Sink = b) and (b._Source = a)
+        if (a.FSink = b) and (b.FSource = a)
         then begin
-                a._Sink := Nil;
-                b._Source := Nil;
+                a.FSink := Nil;
+                b.FSource := Nil;
         end;
 
 end;
 
 constructor TBytePump.Create(Capacity: Integer);
 begin
-        _Capacity       := 0;
+        FCapacity       := 0;
         if Capacity <= 0 then exit;
         SetLength(Data, Capacity);
         SetLength(Pipe, Capacity);
-        _Capacity       := Capacity;
+        FCapacity       := Capacity;
         ReadPos         := 0;
         WritePos        := 0;
-        _Count          := 0;
-        _Left           := Capacity;
-        _FillLevel      := Capacity;
-        _Source         := Nil;
-        _Sink           := Nil;
+        FCount          := 0;
+        FLeft           := Capacity;
+        FFillLevel      := Capacity;
+        FSource         := Nil;
+        FSink           := Nil;
         Waiting         := False;
-        _Ready          := True;
+        FReady          := True;
         QueuePolicy     := QPNone;
         Timer           := TThreadedTimer.Create(nil);
         Timer.Interval  := 1;
         WakeUpTimer     := TThreadedTimer.Create(nil);
         WakeUpTimer.Interval := 1;
-        _Delay          := 0;
+        FDelay          := 0;
         Timer.Enabled   := False;
         WakeUpTimer.Enabled := False;
         Timer.OnTimer := OnTimer;
@@ -142,16 +143,16 @@ end;
 
 procedure TBytePump.SetFillLevel(l: Integer);
 begin
-        if l < 0 then l := _Capacity;
-        if l <= _Capacity then _FillLevel := l
-        else _FillLevel := _Capacity;
-        SetLength(Pipe, _FillLevel);
+        if l < 0 then l := FCapacity;
+        if l <= FCapacity then FFillLevel := l
+        else FFillLevel := FCapacity;
+        SetLength(Pipe, FFillLevel);
 end;
 
 procedure TBytePump.OnTimer(Sender: TObject);
 begin
         Timer.Enabled := False;
-        _Ready := True;
+        FReady := True;
         Pump;
         if assigned(OnReady) then OnReady(Self);
 
@@ -168,10 +169,10 @@ procedure TBytePump.SetDelay(d: Integer);
 begin
         if d > 0 then
         begin
-                _Delay := d;
+                FDelay := d;
                 Timer.Interval := Delay;
                 WakeUpTimer.Interval := Delay;
-        end else _Delay := 0;
+        end else FDelay := 0;
 end;
 
 { flush this queue }
@@ -179,66 +180,65 @@ procedure TBytePump.Flush;
 begin
         ReadPos := 0;
         WritePos := 0;
-        _Count := 0;
-        _Left := _Capacity;
+        FCount := 0;
+        FLeft := FCapacity;
         Waiting := False;
-        _Ready := True;
+        FReady := True;
 end;
 
 { flush this queue and chain flush downwards }
 procedure TBytePump.Purge;
 begin
         Flush;
-        if assigned(_Sink) then _Sink.Purge;
+        if assigned(FSink) then FSink.Purge;
 end;
 
 
 procedure TBytePump.Source(src: TBytePump);
 begin
-        _Source := src;
-        if assigned(_Source) then _Source._Sink := Self;
+        FSource := src;
+        if assigned(FSource) then FSource.FSink := Self;
 end;
 
 procedure TBytePump.Sink(snk: TBytePump);
 begin
-        _Sink := snk;
-        if assigned(_Sink) then _Sink._Source := Self;
+        FSink := snk;
+        if assigned(FSink) then FSink.FSource := Self;
 end;
 
 { break linkage towards sink }
 procedure TBytePump.UnplumbSink;
 begin
-        if assigned(_Sink) then
+        if assigned(FSink) then
         begin
-                _Sink._Source := Nil;
+                FSink.FSource := Nil;
         end;
-        _Sink := Nil;
+        FSink := Nil;
 end;
 
 { break linkage towards source }
 procedure TBytePump.UnplumbSource;
 begin
-        if assigned(_Source) then
+        if assigned(FSource) then
         begin
-                _Source._Sink := Nil;
+                FSource.FSink := Nil;
         end;
-        _Source := Nil;
+        FSource := Nil;
 end;
 
 { breake linkage in both directions but fuse them together }
 procedure TBytePump.Unplumb;
 begin
-        if assigned(_Source) then
+        if assigned(FSource) then
         begin
-                _Sink._Source := _Source;
-                if assigned(_Sink) then _Source._Sink := _Sink;
-                _Source := Nil;
+                if assigned(FSink) then FSource.FSink := FSink;
+                FSource := Nil;
         end;
 
-        if assigned(_Sink) then
+        if assigned(FSink) then
         begin
-                if assigned(_Source) then _Sink._Source := _Source;
-                _Sink := Nil;
+                if assigned(FSource) then FSink.FSource := FSource;
+                FSink := Nil;
         end;
 end;
 
@@ -248,23 +248,23 @@ var
         FillLeft,len: integer;
 begin
 
-        if not assigned(_Source) or (_Left < 1) then exit;
+        if not assigned(FSource) or (FLeft < 1) then exit;
 
         case QueuePolicy of
 
                 { Wait: only pull more data through the pipe if we're ready }
                 QPWait: begin
-                                FillLeft := _FillLevel - _Count;
+                                FillLeft := FFillLevel - FCount;
                                 if FillLeft < 1 then FillLeft := 0;
                                 if Ready and (FillLeft > 0) then begin
-                                        len := _Source.Dequeue(Pipe, FillLeft);
+                                        len := FSource.Dequeue(Pipe, FillLeft);
                                         Enqueue(Pipe, len);
                                 end;
                 end;
 
                 { None: always attempt to pull data from source }
                 QPNone: begin
-                        len := _Source.Dequeue(Pipe, _Left);
+                        len := FSource.Dequeue(Pipe, FLeft);
                         Enqueue(Pipe, len);
                 end;
 
@@ -273,7 +273,7 @@ begin
 end;
 
 { enqueue data }
-function TBytePump._Enqueue(var src: array of byte; len: Integer): Integer;
+function TBytePump.FEnqueue(var src: array of byte; len: Integer): Integer;
 var
         toEnd: Integer;
 begin
@@ -285,14 +285,14 @@ begin
         if (QueuePolicy = QPWait) and (not Ready) then exit;
 
         { no space left }
-        if _Left <= 0 then exit;
+        if FLeft <= 0 then exit;
         { some space left but not enough - only enqueue what we can }
-        if _Left < len then len := _Left;
+        if FLeft < len then len := FLeft;
 
         { only fill up to fill level, no more }
         if QueuePolicy = QPWait then
         begin
-            if ((len + _Count) >= _FillLevel) then len := _FillLevel - _Count;
+            if ((len + FCount) >= FFillLevel) then len := FFillLevel - FCount;
             { queue fill level reached }
             if len <= 0 then
             begin
@@ -301,7 +301,7 @@ begin
             end;
         end;
 
-        toEnd := _Capacity - WritePos;
+        toEnd := FCapacity - WritePos;
 
         { we can append to the end }
         if len <= toEnd then
@@ -315,14 +315,14 @@ begin
         end;
 
         Inc(WritePos, len);
-        WritePos := WritePos mod _Capacity;
-        Inc(_Count, len);
-        Dec(_Left, len);
+        WritePos := WritePos mod FCapacity;
+        Inc(FCount, len);
+        Dec(FLeft, len);
 
         { we reached our fill level - stop pumping notify }
-        if (QueuePolicy = QPWait) and (_Count >= _FillLevel) then
+        if (QueuePolicy = QPWait) and (FCount >= FFillLevel) then
         begin
-                _Ready := False;
+                FReady := False;
                 WakeUpTimer.Enabled := True;
         end;
 
@@ -335,25 +335,25 @@ end;
 { public enqueue - enqueue and pump }
 function TBytePump.Enqueue(var src: array of byte; len: Integer): Integer;
 begin
-        Result := _Enqueue(src,len);
+        Result := FEnqueue(src,len);
         { triger a data pump to sink }
-        if (Result > 0) and assigned(_Sink) then _Sink.Pump;
+        if (Result > 0) and assigned(FSink) then FSink.Pump;
 end;
 
 { dequeue some data }
-function TBytePump._Dequeue(var dst: array of byte; len: Integer): Integer;
+function TBytePump.FDequeue(var dst: array of byte; len: Integer): Integer;
 var
         toEnd: Integer;
 begin
         Result := 0;
 
         { no data queued }
-        if _Count < 1 then exit;
+        if FCount < 1 then exit;
 
         { some data queued but less than what we wanted - only dequeue what we can }
-        if  len > _Count then len := _Count;
+        if  len > FCount then len := FCount;
 
-        toEnd := _Capacity - ReadPos;
+        toEnd := FCapacity - ReadPos;
         { we can read to the end }
         if len <= toEnd then
         begin
@@ -366,19 +366,19 @@ begin
         end;
 
         Inc(ReadPos, len);
-        ReadPos := ReadPos mod _Capacity;
-        Dec(_Count, len);
-        Inc(_Left, len);
+        ReadPos := ReadPos mod FCapacity;
+        Dec(FCount, len);
+        Inc(FLeft, len);
 
         { queue emptied - delay notification if delay specified }
-        if (QueuePolicy = QPWait) and (_Count = 0) then
+        if (QueuePolicy = QPWait) and (FCount = 0) then
         begin
                 if Delay > 0 then
                 begin
-                        _Ready := False;
+                        FReady := False;
                          Timer.Enabled := True
                 end else begin
-                        _Ready := True;
+                        FReady := True;
                 end;
         end;
 
@@ -390,10 +390,10 @@ end;
 function TBytePump.Dequeue(var dst: array of byte; len: Integer): Integer;
 begin
 
-        Result := _Dequeue(dst, len);
+        Result := FDequeue(dst, len);
 
         { pull from source }
-        if (Result > 0) and assigned(_Source) then Pump;
+        if (Result > 0) and assigned(FSource) then Pump;
 end;
 
 end.
