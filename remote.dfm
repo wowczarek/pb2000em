@@ -1,6 +1,6 @@
 object RemoteForm: TRemoteForm
-  Left = 230
-  Top = 108
+  Left = 231
+  Top = 111
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Remote Control'
