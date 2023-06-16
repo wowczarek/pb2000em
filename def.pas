@@ -26,6 +26,9 @@ interface
   PLATFORM_ID = 'PB-2000C';
   VERSION_STR = 'V16-WO';
 
+{ default CPU frequency in KHz }
+    DEF_FREQ    = 910;
+
 { status bits of the Flag Register F }
     Z_bit	= $80;
     C_bit	= $40;

@@ -60,7 +60,7 @@ type
     procedure QueueTimerTimer(Sender: TObject);
     private
     { Private declarations }
-        CmdCache: Array [0..MAXCONNECTIONS - 1] of TCmd;
+        CmdCache: Array [0..MAXCONNECTIONS] of TCmd; { MAXCONNECTIONS + last one for string macros }
         KeyNameStrings: TStringList;
         RequestNameStrings: TStringList;
         CommandNameStrings: TStringList;
@@ -78,6 +78,7 @@ type
         procedure DispatchChar(c: char);
         procedure DispatchKey (key: Word;  ss: TShiftState);
   public
+        procedure ParseString(s: string);
     { Public declarations }
   end;
 
@@ -150,7 +151,6 @@ begin
    QueueTimer.Interval := MainForm.KeyInterval;
    KeyUpTimer.Interval := round(MainForm.KeyInterval / 2);
 
-
    { populate KeyNameStrings with a list of names }
    KeyNameStrings := TStringList.Create;
    for i := 0 to KEYNCOUNT - 1 do KeyNameStrings.Add(KeyNameList[i]);
@@ -162,7 +162,6 @@ begin
    { populate RequestNameStrings with a list of names }
    CommandNameStrings := TStringList.Create;
    for i := 0 to Integer(CMAX) - 1 do CommandNameStrings.Add(CommandNameList[i]);
-
 
    { this module only functions if we told the emulator to listen for remote commands }
     if MainForm.RemotePort <> 0 then
@@ -180,7 +179,6 @@ procedure TRemoteForm.RcSocketClientConnect(Sender: TObject;
   var s: String;
 begin
 
-        QueueTimer.Enabled := true;
         RcConnectedPanel.Color := clGreen;
         RcConnectedPanel.Font.Color := clWhite;
         with RcSocket.Socket do
@@ -234,6 +232,8 @@ begin
                 goto cleanup;
         end;
 
+        QueueTimer.Enabled := True;
+
         { queue keyboard input }
         if CmdQueued < CMDQUEUESIZE then
         begin
@@ -261,6 +261,8 @@ begin
                 Dec(CmdQueued);
                 ExecCmd(c);
         end;
+
+        if CmdQueued = 0 then QueueTimer.Enabled := False;
 
 end;
 
@@ -407,6 +409,9 @@ end;
 
 procedure TRemoteForm.SendResponse(connId: integer; var buf; len: integer);
 begin
+  { manually fed strings don't produce any response }
+  if connId = MAXCONNECTIONS then exit;
+
   with RcSocket.Socket do
   begin
         try
@@ -416,6 +421,20 @@ begin
         end;
   end;
 end;
+
+{ run command parser over a string, and reset the parser at the end - }
+{ one run is meant to be a complete session / set of commands }
+procedure TRemoteForm.ParseString(s: string);
+var b: array of byte;
+begin
+   fillchar(cmdCache[MAXCONNECTIONS], sizeof(TCmd), 0);
+   SetLength(b, length(s));
+   Move(s[1],b[0],length(s));
+   QueueTimer.Enabled := true;
+   ParseBuf(b, length(s), cmdCache[MAXCONNECTIONS]);
+   fillchar(cmdCache[MAXCONNECTIONS], sizeof(TCmd), 0);
+end;
+
 
 { run command parser over a buffer }
 procedure TRemoteForm.ParseBuf(var buf: array of byte; len: integer; var cmd: TCmd);

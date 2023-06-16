@@ -1,6 +1,6 @@
 object MainForm: TMainForm
-  Left = 597
-  Top = 160
+  Left = 1196
+  Top = 221
   HorzScrollBar.Visible = False
   VertScrollBar.Visible = False
   BorderStyle = bsNone
