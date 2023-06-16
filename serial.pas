@@ -12,9 +12,9 @@ const
 
  SOCKBUFSIZE = 1024;  { TCP maximum grabbable chunk }
  RXQUEUESIZE = 256;   { serial port max queue depth }
- RXBUFSIZE =  65535;  { accumulating buffer max size }
- DEFQFIL =      32;   { fill level / block size default }
- DEFDELAY =     100;  { default block delay }
+ RXBUFSIZE =  65536;  { accumulating buffer max size }
+ DEFQFIL =      64;   { fill level / block size default }
+ DEFDELAY =     1000;  { default block delay (ms) at 912 kHz and 64-byte block }
  XONB =         $11;  { XON byte }
  XOFFB =        $13;  { XOFF byte }
 
@@ -123,6 +123,8 @@ type
         XoffEnabled: Boolean;
         { is this thing on? }
         Enabled: Boolean;
+        { calculate automatic block delay }
+        function AutoDelay: Integer;
         procedure SetXonWait(x: Boolean);
         property XonWait: Boolean read _XonWait write SetXonWait;
         procedure DataReady(Sender: TObject);
@@ -152,6 +154,18 @@ implementation
 uses Def, Cpu, Port, Main;
 
 {$R *.DFM}
+
+{ calculate optimal block delay }
+function TSerialForm.AutoDelay: Integer;
+begin
+
+        { delay is DEFDELAY at default frequency and default block size - scale it }
+        Result := round (
+                (DEFDELAY / (OscFreq / DEF_FREQ)) *
+                 (RxQueue.FillLevel / DEFQFIL)
+                 );
+
+end;
 
 procedure TSerialForm.SetXonWait(x: Boolean);
 begin
@@ -440,7 +454,7 @@ begin
         RxQueue.QueuePolicy := QPWait;
         cbBlocks.Checked := True;
         cbBlocks.OnClick(nil);
-        RxQueue.Delay := DEFDELAY;
+        RxQueue.Delay := AutoDelay;
         RxQueue.OnReady := DataReady;
         QueueBar.Max := RXQUEUESIZE;
         BufferBar.Max := RXBUFSIZE;
@@ -671,12 +685,7 @@ end;
 procedure TSerialForm.FormDestroy(Sender: TObject);
 begin
 
-        { unplumb the two, otherwise we need to free in reverse order to creating }
-        //RxQueue.Unplumb;
-        //RxBuffer.Unplumb;
-
-       // RxQueue.Free;
-        //RxBuffer.Free;
+        { revisit what needs freed, but this is on exit, so... }
 
 end;
 
@@ -720,7 +729,7 @@ begin
 
         if (i < 0) then
         begin
-                i := DEFDELAY;
+                i := AutoDelay;
                 BlockDelay.Text := IntToStr(i);
         end;
 
