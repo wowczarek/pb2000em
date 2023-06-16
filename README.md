@@ -18,7 +18,7 @@ The original sources reside in branch v26-piotr443.
 
 ### Serial port emulation
 
-Working RS-232C serial port emulation where data is exchanged via a TCP socket which can be accessed on the host locally (default) or from the outside. The state of INT1 masking / unmasking is tracked, so no data is forwarded to the PB-2000C until it opens its serial port. Baud rate is ignored, XOFF/XON is supported and will pause and resume sending data to the PB-2000C. The serial port monitor window is mapped to F4 key.
+Working RS-232C serial port emulation where data is exchanged via a TCP socket which can be accessed on the host locally (default) or from the outside. The state of INT1 masking / unmasking is tracked, so no data is forwarded to the PB-2000C until it opens its serial port. Baud rate is ignored, XOFF/XON is supported and will pause and resume sending data to the PB-2000C. The serial port monitor window is mapped to the F4 key.
 
 Serial data can be peeked in both ASCII and hex, recorded to files (TODO), and files can be buffered for transmission by dragging a file onto the serial port window. Supported both when emulating the presence of an FA-7 and an MD-100 (OptionCode setting or the new Interface setting). The serial port module operates a 64-kilobyte buffer that passes data to a 256-byte queue (size corresponding to PB's 256-byte RS232 buffer), which is gradually emptied as PB-2000C reads the data. Data can be transferred in blocks with a configurable per-block delay, which makes it possible to transfer data without XOFF/XON without buffer overruns - as long as you don't exceed a backlog of 64k that is.
 
@@ -71,9 +71,9 @@ A new connection is greeted by sending a string `EMHELLO` to the client. Simple 
 | Shift-F5 | `<etc>` |
 | Shift-F9 | Toggle power on/off |
 | PgDn | `<caps>` |
-| PgUp | `<s>`, the red Shift key |
+| PgUp | `<s>`, the red Shift key. See also https://en.wikipedia.org/wiki/Redshift for some physics fun |
 | Alt | `<ans>` |
-| Esc | BRK, also power on if PB-2000C sleeping |
+| Esc | `<brk>`, also power on if PB-2000C sleeping |
 | Backspace\* | `<bs>` |
 | Ins\* | `<ins>` |
 | Del\* | `<del>` |
