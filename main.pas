@@ -92,6 +92,11 @@ var
     PulseCounter: integer = 0;
     RunTimerFrequency: integer;
 
+{ power-on macro support }
+
+    RanMacro: boolean = false;
+    MacroString: string = '';
+
 { keyboard }
     keypads1: integer = KEYPADS;
     lastkey1: integer = LASTKEYCODE;
@@ -490,6 +495,13 @@ begin
   RefreshTimer.Enabled := True;
   SecTimer.Enabled := True;
   RedrawReq := True;
+
+  if (not RanMacro) and (MacroString <> '') then
+  begin
+        RanMacro := true;
+        RemoteForm.ParseString(MacroString);
+  end;
+
 end;
 
 
@@ -535,7 +547,7 @@ begin
   Ini1 := TIniFile.Create (ExpandFileName(IniName));
   with Ini1 do
   begin
-    OscFreq := ReadInteger ('Settings', 'OscFreq', 910);
+    OscFreq := ReadInteger ('Settings', 'OscFreq', DEF_FREQ);
     OptionCode := byte (ReadInteger ('Settings', 'OptionCode', OC_NONE));
     InterfaceType := UpperCase(ReadString('Settings','Interface',''));
     if (OptionCode = OC_NONE) and (InterfaceType <> '') then
@@ -556,6 +568,7 @@ begin
     MainForm.RemoteAddress := ReadString('Remote', 'Listen', '127.0.0.1');
     { Remote control key input interval in ms (keyup = half time) }
     MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 50);
+    MacroString := ReadString('Remote','Autorun','');
   end {with};
   Ini1.Free;
 end {IniLoad};
@@ -874,6 +887,7 @@ end;
 
 procedure TMainForm.OnSecTimer(Sender: TObject);
 begin
+
   Inc (tm);
   if (tm and $3F) = 60 then
   begin
