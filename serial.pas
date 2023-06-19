@@ -44,7 +44,7 @@ type
     QueueFlush: TButton;
     QueueBar: TProgressBar;
     TestLabel: TLabel;
-    Int1Timer: TTimer;
+    Int1Timer: TThreadedTimer;
     CntReset: TButton;
     PBOpenPanel: TPanel;
     BtnToggle: TButton;
@@ -489,16 +489,19 @@ begin
         TxCapture := False;
 
     { this module only functions if we told the emulator we have an FA-7 ($00) or MD-100 ($55) }
-    if ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) and (MainForm.SerialPort <> 0) then
-    with SerialSocket do
+    if ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) then
+    begin
+        if (MainForm.SerialPort <> 0) then with SerialSocket do
         begin
                 TBindingSocket(SerialSocket).Address := MainForm.SerialAddress;
                 Port := MainForm.SerialPort;
                 Active := True;
                 Open;
                 ClientMonitor.Caption := 'TCP Client (Port: '+IntToStr(Port)+')';
+        end else begin
+                ClientMonitor.Caption := 'TCP Client (not configured)';
         end;
-
+    end { if OptionCode }
 end;
 
 { a trivial way to blink LEDs. Incoming data lights them up, this periodically switches them all off }
@@ -727,7 +730,7 @@ begin
 
         i := StrToIntDef(BlockDelay.text,0);
 
-        if (i < 0) then
+        if (i < 1) then
         begin
                 i := AutoDelay;
                 BlockDelay.Text := IntToStr(i);
