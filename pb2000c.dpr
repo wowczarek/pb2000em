@@ -16,7 +16,7 @@ uses
   Exec in 'exec.pas',
   Serial in 'serial.pas' {SerialForm},
   Remote in 'remote.pas' {RemoteForm},
-  utils in 'utils.pas';
+  Utils in 'utils.pas';
 
 {$R *.res}
 
