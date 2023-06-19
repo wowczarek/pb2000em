@@ -97,7 +97,8 @@ begin
   FddRdData := OptionCode;
   with MainForm.FddSocket do
   begin
-    if ((Address = '') or (Port = 0)) and (MainForm.SerialPort = 0) then OptionCode := OC_NONE;
+    { disable external device if MD-100 configured but no port or address given }
+    if (OptionCode = OC_MD100) and ((Address = '') or (Port = 0)) then OptionCode := OC_NONE;
   end {with};
 end {IoInit};
 
