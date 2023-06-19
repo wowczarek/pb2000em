@@ -105,17 +105,6 @@ interface
 { free adress space, number of bytes determined by the function FetchOpcode }
     dummysrc: array[0..3] of byte = ( $FF, $FF, $FF, $FF );
 
-{ key code of first letter from list below }
-    LFIRSTCODE = 4;
-{ characters which can be entered from keyboard as is }
-    Letters: string[71] =
-	#09'''()[]|aaaaaQWERTYUIOP=ASDFGHJKL;:ZXCVBNM,aa aaaaaaaaaaa/789*456-123+0.';
-{ characters which require the [s] key (overlaid onto the above) }
-    ShiftLetters: string[71] =
-  	   'a!"#$%&aaaaa?@\_`{}~<>^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-{ TODO: characters which will trigger a Caps switch when entered with Shift }
-    CapsLetters: string[71] =
-	   'aaaaaaaaaaaaQWERTYUIOPaASDFGHJKLaaZXCVBNMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   var
     memdef: array[0..MEMORIES-1] of mem_properties = (
       (	storage:	nil;
