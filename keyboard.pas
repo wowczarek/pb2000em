@@ -23,6 +23,51 @@ const
   KEYPADS = 13;		{index of the last item in the 'keypad' array}
   LASTKEYCODE = 81;
 
+{ list of key codes for function keys }
+
+  KC_NONE       = 0;
+  KC_POWER      = 1;
+  KC_TAB        = 4;
+  KC_MEMO       = 11;
+  KC_IN         = 12;
+  KC_OUT        = 13;
+  KC_CALC       = 14;
+  KC_SHIFT      = 15;
+  KC_CAPS       = 46;
+  KC_ANS        = 47;
+  KC_SPC        = 48;
+  KC_INS        = 49;
+  KC_UP         = 50;
+  KC_DEL        = 51;
+  KC_MENU       = 52;
+  KC_LEFT       = 53;
+  KC_DOWN       = 54;
+  KC_RIGHT      = 55;
+  KC_CAL        = 56;
+  KC_BRK        = 57;
+  KC_CLS        = 58;
+  KC_BS         = 59;
+  KC_EXE        = 75;
+  KC_M1         = 76;
+  KC_M2         = 77;
+  KC_M3         = 78;
+  KC_M4         = 79;
+  KC_ETC        = 80;
+  KC_KANA       = 81;
+  KC_NEWALL     = 82;
+  KC_LAST       = KC_NEWALL;
+{ key code mappings for 'character' keys }
+
+{ key code of first letter from list below }
+    KC_FIRSTCHAR = 4;
+{ characters which can be entered from keyboard as is }
+    Letters: string[71] =
+	#09'''()[]|aaaaaQWERTYUIOP=ASDFGHJKL;:ZXCVBNM,aa aaaaaaaaaaa/789*456-123+0.';
+{ characters which require the [s] key (overlaid onto the above) }
+    ShiftLetters: string[71] =
+  	   'a!"#$%&aaaaa?@\_`{}~<>^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+
   keypad: array[0..KEYPADS] of keyblock = (
 { power switch, code:1 }
     (	L:0;	T:27;	W:11;	H:99;	SX:40;	SY:120;	col:1;	cnt:1;	OX:0;	OY:0	),
@@ -59,11 +104,13 @@ var
   KeyCode1: integer;		{ from the mouse }
   KeyCode2: integer;		{ from the keyboard }
   DelayedKeyCode2: integer = 0; { two-key combo, code sent on key release }
+  function GetCharacterCode(c: char; var needsShift: boolean): integer;
   function ReadKy (Ko: byte) : word;
-
+  procedure SendKeyCode(kc: integer);
+  procedure KeyInterrupt;
 
 implementation
-
+uses cpu, def;
 const
 
 { tables converting KeyCode1 and KeyCode2 to the KY state for given KO }
@@ -728,6 +775,49 @@ const
 
 );
 
+function GetCharacterCode(c: char; var needsShift: boolean): integer;
+var
+        n: integer;
+begin
+        Result := 0;
+        needsShift := false;
+        c := UpCase(c);
+        n := pos(c, Letters);
+        { key is on key face, return key code }
+        if (n > 0) then
+        begin
+                Result := n + KC_FIRSTCHAR - 1;
+                Exit;
+        end;
+
+        n := pos(c, ShiftLetters);
+        { key is not on key face and requires shift, send shift (red S) first and send wanted key on release }
+        if (n > 0) then
+        begin
+                Result := n + KC_FIRSTCHAR - 1;
+                needsShift := True;
+        end
+
+end;
+
+procedure SendKeyCode(kc: integer);
+begin
+        if (kc >= 0) and (kc < KC_LAST) then
+        begin
+                KeyCode2 := kc;
+                KeyInterrupt;
+        end;
+end;
+
+procedure KeyInterrupt;
+const
+{ table of interrupt capable KY bits for specified IA bits 5,4 }
+  ktab: array [0..3] of word = ( $0000, $0080, $00C0, $F0FF );
+begin
+  if ((ia and $80) <> 0) and	{ key interrupt specified? }
+     ((ReadKy (ia and $0F) and ktab[(ia shr 4) and 3]) <> 0) then
+	SetIfl (KEYPULSE_bit);
+end {KeyInterrupt};
 
 function ReadKy (Ko: byte) : word;
 begin
