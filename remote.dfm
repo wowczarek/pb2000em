@@ -1,6 +1,6 @@
 object RemoteForm: TRemoteForm
-  Left = 231
-  Top = 111
+  Left = 232
+  Top = 121
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Remote Control'
@@ -67,15 +67,13 @@ object RemoteForm: TRemoteForm
     Left = 67
     Top = 6
   end
-  object KeyUpTimer: TTimer
-    Enabled = False
+  object KeyUpTimer: TThreadedTimer
     Interval = 25
     OnTimer = KeyUpTimerTimer
     Left = 99
     Top = 6
   end
-  object QueueTimer: TTimer
-    Enabled = False
+  object QueueTimer: TThreadedTimer
     Interval = 50
     OnTimer = QueueTimerTimer
     Left = 131
