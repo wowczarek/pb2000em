@@ -27,8 +27,7 @@ The host side obviously isn't a serial port in the sense of a serial port. This 
 #### Serial port in action
 
 [![Casio PB-2000C Emulator - Serial port demo]
-(https://img.youtube.com/vi/DGZZbZ2T9q0/maxresdefault.jpg)]
-(https://www.youtube.com/watch?v=DGZZbZ2T9q0)
+(https://img.youtube.com/vi/DGZZbZ2T9q0/maxresdefault.jpg)](https://www.youtube.com/watch?v=DGZZbZ2T9q0)
 
 ### Remote control protocol
 
@@ -49,9 +48,7 @@ This allows e.g. remote scripted demos, or creating alternative keyboard and LCD
 
 #### Remote LCD in action
 
-[![Casio PB-2000C Emulator - Remote LCD demo]
-(https://img.youtube.com/vi/enalApGbco0/maxresdefault.jpg)]
-(https://www.youtube.com/watch?v=enalApGbco0)
+[![Casio PB-2000C Emulator - Remote LCD demo](https://img.youtube.com/vi/enalApGbco0/maxresdefault.jpg)](https://www.youtube.com/watch?v=enalApGbco0)
 
 #### Response format
 
