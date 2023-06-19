@@ -61,8 +61,8 @@ type
         function Dequeue(var dst: array of byte; len: Integer): Integer;
         procedure Source(src: TBytePump);
         procedure Sink(snk: TBytePump);
-        procedure UnplumbSource;
-        procedure UnplumbSink;
+        procedure BreakSource;
+        procedure BreakSink;
         procedure Unplumb;
         property Capacity: Integer read FCapacity;
         property Count: Integer read FCount;
@@ -78,7 +78,7 @@ type
   procedure UnlinkPumps(a: TBytePump; b: TBytePump);
 
 implementation
-uses Serial;
+
 procedure LinkPumps(Source: TBytePump; Sink: TBytePump);
 begin
 
@@ -207,7 +207,7 @@ begin
 end;
 
 { break linkage towards sink }
-procedure TBytePump.UnplumbSink;
+procedure TBytePump.BreakSink;
 begin
         if assigned(FSink) then
         begin
@@ -217,7 +217,7 @@ begin
 end;
 
 { break linkage towards source }
-procedure TBytePump.UnplumbSource;
+procedure TBytePump.BreakSource;
 begin
         if assigned(FSource) then
         begin
