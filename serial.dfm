@@ -1,6 +1,6 @@
 object SerialForm: TSerialForm
-  Left = 271
-  Top = 385
+  Left = 272
+  Top = 395
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Serial Port Monitor'
@@ -439,8 +439,7 @@ object SerialForm: TSerialForm
     OnClientError = SerialSocketClientError
     Left = 112
   end
-  object Int1Timer: TTimer
-    Enabled = False
+  object Int1Timer: TThreadedTimer
     Interval = 1
     OnTimer = Int1TimerTimer
     Left = 80
