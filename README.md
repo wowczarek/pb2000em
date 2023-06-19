@@ -8,7 +8,7 @@ The PB-2000C is my platform of choice and while some items may or may not end up
 
 **Note:** *This repository does NOT contain any of the Casio ROM images required for the emulator to function.*
 
-The compiled pb2000c.exe or the contents of the .zip file from the Releases section (including - or not - the .ini file) can be copied into the location where the extracted Piotr's emulator resides, or the required `rom0.bin`, `rom1.bin` and an optional card image `rom2.bin` can be copied in from, erm, somewhere.
+The compiled pb2000c.exe or the contents of the .zip file from the Releases section once available (including - or not - the .ini file) can be copied into the location where the extracted Piotr's emulator resides, or the required `rom0.bin`, `rom1.bin` and an optional card image `rom2.bin` can be copied in from, erm, somewhere.
 
 Author's official website is at: http://www.pisi.com.pl/piotr433/pb2000ee.htm
 
