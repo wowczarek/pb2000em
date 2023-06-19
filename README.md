@@ -24,6 +24,11 @@ Serial data can be peeked in both ASCII and hex, recorded to files (TODO), and f
 
 The host side obviously isn't a serial port in the sense of a serial port. This is a TCP socket where the emulator listens, passing input to the emulated PB-2000C's serial port and passing output to the TCP client. This can be set up as a serial port in your Windows system using any of the available "Virtual COM port" type drivers, if you really need this to be a serial port, although no baud rate negotiation or anything similar will be done unless the virtual serial port does that - it's a straight up TCP pipe. This was developed mostly to assist with the development of the PBNET project: https://github.com/wowczarek/pbnet - but can of course be used by any application you may want to develop, or can be used with the likes of netcat / socat to send files.
 
+#### Serial port in action
+
+[![Casio PB-2000C Emulator - Serial port demo]
+(https://img.youtube.com/vi/DGZZbZ2T9q0/maxresdefault.jpg)](https://www.youtube.com/watch?v=DGZZbZ2T9q0)
+
 ### Remote control protocol
 
 A TCP-based remote control protocol was added with a simple but extensive command parser. It is part-ASCII, part-binary, where command entry is exclusively ASCII which makes it possible to comfortably use it via e.g. a raw telnet or netcat 
@@ -32,16 +37,20 @@ session. Characters are accepted as is, while keys and commands take the form of
 #### Functionality:
 
 - direct character entry, including ANSI escape sequences for cursor keys as well as del, esc, tab, bs, meaning that text can be entered without issues
-- named key entry in the form of `<key>` where the keys mostly match what's on the key face of the PB-2000C, such as `<menu>`, `<s>`, `<cls>` - supported for most function keys. The silver keys under the LCD are `<m1> ... <m4>` and `<etc>`. Currently not supported are the `[memo]` and `[in/out/calc]` keys. This sends keyboard shortcuts to the emulator rather than Casio key codes to the CPU - this will be changed so it's independent from keyboard shortcut mappings (TODO)
+- named key entry in the form of `<key>` where the names match what's on the key face of the PB-2000C, such as `<menu>`, `<s>`, `<cls>`. The silver keys under the LCD are `<m1> ... <m4>` and `<etc>`. This sends Casio key codes to the CPU and simulates a "key up" event. The "New All" key is considered dangerous, so it is mapped to `<newallyesimsure>`.
 - requests, where we ask the emulator for some data or for state: `<version?>`,`<power?>`,`<pause?>`, also reading the LCD controller memory through `<vmem?>`, reading the current breakpoint with `<bkpt?>` (TODO) and reading registers via `<regs?>` (TODO)
-- commands with optional parameters, such as `<power off!>`, `<power on!>` `<power!>` (toggle), `<pause on!>`, `<pause off!>`, `<pause!>` (toggle), `<getmem [bank, decimal] [start, hex] [len, decimal]!>` (TODO), `<savemem!>` to save memory to disk without exiting the emulator, `<bkpt [hex addr]!>` (TODO), `<bkpt off!>` and `<bkpt on!>` (TODO).
-- key entry is buffered and executed in configurable intervals (max queue: 2048 keys), where commands and requests are executed immediately
+- commands with optional parameters, such as `<reset!>`, `<power off!>`, `<power on!>` `<power!>` (toggle), `<pause on!>`, `<pause off!>`, `<pause!>` (toggle), `<getmem [bank, decimal] [start, hex] [len, decimal]!>` (TODO), `<savemem!>` to save memory to disk without exiting the emulator, `<loadmem!>` to do the reverse (at your own risk!), `<bkpt [hex addr]!>` (TODO), `<bkpt off!>` and `<bkpt on!>` (TODO). There is also `<wakeup!>` to wake the PB-2000C up from auto power-off (APO) sleep.
+- key entry is buffered and executed in configurable intervals (max queue: 2048 keys), where commands and requests are executed immediately. The interval is controlled by the `[Remote]` → `Interval` setting in the .ini file, with a default of 120 ms, which is suitable for the default CPU frequency.
 - multiple concurrent sessions (up to 8, but this is an arbitrary choice), so multiple clients can execute commands simultaneously, such as one remote LCD viewer and one remote keyboard
 - a startup macro which is a key sequence executed on first power on, configured using the `[Remote]` → `Autorun` setting in the .ini file - this can be used to do, well, anything you want, on startup, especially with ROMs lacking an `auto.exe` type functionality
 
 This allows e.g. remote scripted demos, or creating alternative keyboard and LCD presentations, let's say a web viewer for the LCD, or if you so wish, a physical LCD or lights in a tower building (hint! someone do this please!). I've written a simple LCD viewer for Linux to demo this, which displays PB2000C's LCD in a console window using Unicode block elements at configurable frame rate - source to be published on GitHub. This protocol will also be the basis for the operation of a headless PB-2000C emulator I am planning to write, which will be (of course) based on Piotr's work, but running in a GUI-free setting.
 
-#### Response format:
+#### Remote LCD in action
+
+[![Casio PB-2000C Emulator - Remote LCD demo](https://img.youtube.com/vi/enalApGbco0/maxresdefault.jpg)](https://www.youtube.com/watch?v=enalApGbco0)
+
+#### Response format
 
 A new connection is greeted by sending a string `EMHELLO` to the client. Simple responses to requests such as `<power?>` etc, are an ASCII string in the form of `KEY=VALUE`. Responses with binary data are prepended with the command name that requested it, such as `VMEM` with 1536 nibble-occupied bytes following. Reading of registers will likely take two forms, one ASCII and one binary, such as `<regs?>` and `<regs bin?>`.
 
@@ -56,15 +65,17 @@ A new connection is greeted by sending a string `EMHELLO` to the client. Simple 
 | F3 | Halt CPU and open debug window |
 | F4 | Toggle serial port monitor window |
 | F5 | Toggle remote control status window |
+| F8 | New All (clear RAM) |
+| F9 | Reset |
 | F12\* | `<cls>` |
-| Menu / Apps ("right click") key | `<menu>` |
-| Shift + Menu | `<cal>` |
 | Shift-F1 | `<m1>` = first key under LCD |
 | Shift-F2 | `<m2>` = second key under LCD |
 | Shift-F3 | `<m3>` = third key under LCD |
 | Shift-F4 | `<m4>` = fourth key under LCD |
 | Shift-F5 | `<etc>` |
 | Shift-F9 | Toggle power on/off |
+| Menu / Apps ("right click") key | `<menu>` |
+| Shift + Menu | `<cal>` |
 | PgDn | `<caps>` |
 | PgUp | `<s>`, the red Shift key. See also https://en.wikipedia.org/wiki/Redshift for some physics fun |
 | Alt | `<ans>` |

@@ -53,9 +53,10 @@ type
 
 var
     MainForm: TMainForm;
-    procedure KeyInterrupt;
     function MemSave (fname: string; memory: PChar; fsize: integer) : boolean;
-    procedure SaveState(warn: boolean; release: boolean);
+    function MemLoad (fname: string; memory: PChar; fsize: integer) : boolean;
+    function SaveState(warn: boolean; release: boolean): boolean;
+    function LoadState(warn: boolean; reserve: boolean): boolean;
     procedure ReleaseKey1 (X, Y: Integer);
     function TogglePower: boolean;
     procedure SetPower(p: boolean);
@@ -124,15 +125,52 @@ begin
 
 end;
 
-procedure SaveState(warn: boolean; release: boolean);
+function LoadState(warn: boolean; reserve: boolean): boolean;
 var
   i, size: integer;
 begin
+  Result := true;
+{ load the register file image }
+  if not MemLoad (RegName, PChar(@mr[0]), 36) then
+  begin
+        Result := false;
+        exit;
+  end;
+  ss := ptrw(@mr[32])^;
+  us := ptrw(@mr[34])^;
+{ load the memory images }
+  for i:=0 to MEMORIES-1 do
+  begin
+    with memdef[i] do
+    begin
+      size := (last-first) shl memorg;
+      if reserve then GetMem (storage, size);
+      if filename <> '' then
+      begin
+        if not MemLoad (filename, storage, size) then
+        begin
+          if required then
+          begin
+                Result := false;
+                if warn then MessageDlg (LoadMsg + filename, mtWarning, [mbOk], 0);
+          end {if};
+        end {if};
+      end {if};
+    end {with};
+  end {for};
+end;
+
+function SaveState(warn: boolean; release: boolean): boolean;
+var
+  i, size: integer;
+begin
+ Result := true;
 { save the register file image }
   ptrw(@mr[32])^ := ss;
   ptrw(@mr[34])^ := us;
   if not MemSave (RegName, PChar(@mr[0]), 36) then
   begin
+    Result := false;
     if warn then MessageDlg (SaveMsg + RegName, mtWarning, [mbOk], 0);
   end {if};
 { save the memory images }
@@ -145,6 +183,7 @@ begin
       begin
         if not MemSave (filename, storage, size) then
         begin
+          Result := false;
           if warn then MessageDlg (SaveMsg + filename, mtWarning, [mbOk], 0);
         end {if};
       end {if};
@@ -154,18 +193,6 @@ begin
   end {for};
 
 end;
-
-procedure ResetAll;
-begin
-  lcdctrl := 0;
-  LcdInit;
-  pdi := (pdi and $03) or $F8;
-  pe := $00;
-  IoInit;
-  ptrw(memdef[GATEARRAY].storage)^ := 0;
-  CpuReset;
-end {ResetAll};
-
 
 { draws the image of a key from the KeyBmp }
 procedure DrawKey (index, x, y: integer; pressed: boolean);
@@ -269,18 +296,6 @@ begin
   if RedrawReq = True then Canvas.Draw (63, 45, LcdBmp);
   RedrawReq := False;
 end;
-
-
-procedure KeyInterrupt;
-const
-{ table of interrupt capable KY bits for specified IA bits 5,4 }
-  ktab: array [0..3] of word = ( $0000, $0080, $00C0, $F0FF );
-begin
-  if ((ia and $80) <> 0) and	{ key interrupt specified? }
-     ((ReadKy (ia and $0F) and ktab[(ia shr 4) and 3]) <> 0) then
-	SetIfl (KEYPULSE_bit);
-end {KeyInterrupt};
-
 
 { release a pressed key if it's placed outside the coordinates X,Y }
 procedure ReleaseKey1 (X, Y: Integer);
@@ -504,7 +519,6 @@ begin
 
 end;
 
-
 { load a binary file, returns true if OK }
 function MemLoad (fname: string; memory: PChar; fsize: integer) : boolean;
 var
@@ -567,7 +581,7 @@ begin
     { Remote control listen address }
     MainForm.RemoteAddress := ReadString('Remote', 'Listen', '127.0.0.1');
     { Remote control key input interval in ms (keyup = half time) }
-    MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 50);
+    MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 100);
     MacroString := ReadString('Remote','Autorun','');
   end {with};
   Ini1.Free;
@@ -605,29 +619,8 @@ begin
       lcdchr[2*size + i div 8, 2*(i mod 8) + 1] := lcdchr[size,i] and $F;
     end {for};
   end {for};
-{ load the register file image }
-  MemLoad (RegName, PChar(@mr[0]), 36);
-  ss := ptrw(@mr[32])^;
-  us := ptrw(@mr[34])^;
-{ load the memory images }
-  for i:=0 to MEMORIES-1 do
-  begin
-    with memdef[i] do
-    begin
-      size := (last-first) shl memorg;
-      GetMem (storage, size);
-      if filename <> '' then
-      begin
-        if not MemLoad (filename, storage, size) then
-        begin
-          if required then
-          begin
-            MessageDlg (LoadMsg + filename, mtWarning, [mbOk], 0);
-          end {if};
-        end {if};
-      end {if};
-    end {with};
-  end {for};
+  { load memory contents from files }
+  LoadState(true, true);
   IniLoad;
   RunTimerFrequency := 1000 div RunTimer.Interval;
 end;
@@ -684,24 +677,22 @@ end {OverlayFlip};
 
 
 procedure TMainForm.FormKeyPress(Sender: TObject; var Key: Char);
-{ letter and shift-letter list moved to Def unit }
   var
-  n,sn: integer;
+  kc: integer;
+  needsShift: boolean;
 begin
-  Key := UpCase(Key);
-  n := pos(Key, Letters);
-  sn := pos(Key, ShiftLetters);
-  { key is on key face, send key code }
-  if (n > 0) then
+ { Keyboard unit }
+  kc := GetCharacterCode(Key, needsShift);
+  if kc = 0 then exit;
+
+  if needsShift then
   begin
-    KeyCode2 := n + LFIRSTCODE - 1;
-    KeyInterrupt;
-  end
-  { key is not on key face and requires shift, send shift (red S) first and send wanted key on release }
-  else if (sn > 0) then
+     KeyCode2 := KC_SHIFT;
+     DelayedKeyCode2 := kc;
+     KeyInterrupt;
+  end else
   begin
-     KeyCode2 := 15;
-     DelayedKeyCode2 := sn + LFIRSTCODE - 1;
+     KeyCode2 := kc;
      KeyInterrupt;
   end;
 
@@ -719,61 +710,76 @@ procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
 var
   save: integer;
   shiftable: boolean;
+  caught: boolean;
 begin
+
   save := Key;
-  if ssShift in shift then case Key of
-    VK_ESCAPE:  CpuWakeUp (False);
-    VK_APPS:    KeyCode2 := 56; { CAL } { shift-menu = CAL }
-    VK_F1:      KeyCode2 := 76; { M1 = 1st key under LCD }
-    VK_F2:      KeyCode2 := 77; { M2 = 2nd key under LCD }
-    VK_F3:      KeyCode2 := 78; { M3 = 1st key under LCD }
-    VK_F4:      KeyCode2 := 79; { M4 = 2nd key under LCD }
-    VK_F5:      KeyCode2 := 80; { ETC }
+
+  if ssShift in Shift then case Key of
+    VK_APPS:    KeyCode2 := KC_CAL; { CAL } { shift-menu = CAL }
+    VK_F1:      KeyCode2 := KC_M1; { M1 = 1st key under LCD }
+    VK_F2:      KeyCode2 := KC_M2; { M2 = 2nd key under LCD }
+    VK_F3:      KeyCode2 := KC_M3; { M3 = 1st key under LCD }
+    VK_F4:      KeyCode2 := KC_M4; { M4 = 2nd key under LCD }
+    VK_F5:      KeyCode2 := KC_ETC; { ETC }
     VK_F9:      TogglePower;
-    VK_F12:     KeyCode2 := 58; { CLS used with Shift - special case }
-  end else case Key of
-    VK_NEXT:	KeyCode2 := 46;	{ CAPS }
-    VK_MENU:    KeyCode2 := 47; { ANS } { ALT key }
-    VK_PRIOR:	KeyCode2 := 15;	{ red S }
-    VK_ESCAPE:	KeyCode2 := 57;	{ BRK }
-    VK_F12:     KeyCode2 := 58; { CLS }
-    VK_BACK:	KeyCode2 := 59;	{ BS }
-    VK_INSERT:	KeyCode2 := 49;	{ INS }
-    VK_DELETE:	KeyCode2 := 51;	{ DEL }
-    VK_APPS:    KeyCode2 := 52; { MENU } { menu = menu }
-    VK_RETURN:  KeyCode2 := 75;	{ EXE }
-    VK_TAB:     KeyCode2 := 4;  { TAB }
-    VK_LEFT:	KeyCode2 := 53;	{ <- }
-    VK_RIGHT:	KeyCode2 := 55;	{ -> }
-    VK_UP:	KeyCode2 := 50;	{ up }
-    VK_DOWN:	KeyCode2 := 54;	{ down }
+  end;
+
+  { see if a key was caught - if not, check other keys }
+  caught := (ssShift in Shift) and (Key in [ VK_APPS, VK_F1,
+                                             VK_F2, VK_F3, VK_F4, VK_F5,
+                                             VK_F9 ]);
+
+  if not caught then case Key of
+    VK_NEXT:	KeyCode2 := KC_CAPS;	{ CAPS }
+    VK_MENU:    KeyCode2 := KC_ANS;     { ANS } { ALT key }
+    VK_PRIOR:	KeyCode2 := KC_SHIFT;	{ red S }
+    VK_ESCAPE:	begin
+                CpuWakeup(False);
+                KeyCode2 := KC_BRK;     { BRK }
+    end;
+    VK_F12:     KeyCode2 := KC_CLS;     { CLS }
+    VK_BACK:	KeyCode2 := KC_BS;	{ BS }
+    VK_INSERT:	KeyCode2 := KC_INS;	{ INS }
+    VK_DELETE:	KeyCode2 := KC_DEL;	{ DEL }
+    VK_APPS:    KeyCode2 := KC_MENU;    { MENU } { menu = menu }
+    VK_RETURN:  KeyCode2 := KC_EXE;	{ EXE }
+    VK_TAB:     KeyCode2 := KC_TAB;     { TAB }
+    VK_LEFT:	KeyCode2 := KC_LEFT;	{ <- }
+    VK_RIGHT:	KeyCode2 := KC_RIGHT;	{ -> }
+    VK_UP:	KeyCode2 := KC_UP;	{ up }
+    VK_DOWN:	KeyCode2 := KC_DOWN;	{ down }
     VK_F2:	OverlayFlip;
     VK_F3:	DebugForm.Show;
-    VK_F4:      if (SerialPort > 0) and ((OptionCode = OC_FA7) or (OptionCode = OC_MD100)) then
+    VK_F4:      if (OptionCode = OC_FA7) or (OptionCode = OC_MD100) then
                 begin
                         SerialForm.Visible := not SerialForm.Visible;
                 end;
     VK_F5:      if RemotePort > 0 then
                 begin
-                        RemoteForm.Visible := not SerialForm.Visible;
+                        RemoteForm.Visible := not RemoteForm.Visible;
                 end;
 
-    VK_F8:	KeyCode2 := 82;	{ New All }
+    VK_F8:	begin
+                        { allow NewAll without confirmation if Nil given, otherwise ask }
+                        if (Sender = Nil) or
+                         (MessageDlg('New All will erase all data in RAM! Are you sure? ', mtCustom,
+                                        [mbYes, mbNo], 0) = mrYes)
+                        then KeyCode2 := KC_NEWALL;	{ New All }
+                end;
     VK_F9:      ResetAll;       { RESET }
   end {case};
 
-  shiftable := false;
-
-  if Key in [
+  shiftable := Key in [
         VK_NEXT, VK_PRIOR, VK_ESCAPE, VK_F12, VK_BACK, VK_INSERT, VK_DELETE,
         VK_RETURN, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN
-        ] then shiftable := true;
+        ];
 
   { key can be used with red S and we have Shift pressed: send red S and send key on release }
   if shiftable and (ssShift in Shift) then
   begin
         DelayedKeyCode2 := KeyCode2;
-        KeyCode2 := 15;
+        KeyCode2 := KC_SHIFT;
         KeyInterrupt;
   end;
 

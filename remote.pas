@@ -5,7 +5,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  ScktComp, ExtCtrls;
+  ScktComp, ExtCtrls, ThdTimer;
 const
         RXBUFSIZE = 1024; { TCP buffer size per received chunk }
         CMDQUEUESIZE = 2048; { max # of queued key entry commands }
@@ -16,16 +16,16 @@ const
 type
 
   TCmdParserState  = ( sAny, sToken, sParams, sEsc, sCsi );     { parser states }
-  TCmdType = ( cNone, cChar, cKey, cRequest, cCommand );        { remote command types }
-  TRequestType = ( RPOWER, RPAUSE, RGETMEM, RVMEM, RVERSION, RMAX );             { request types (ask for something) }
-  TCommandType = ( CPOWER, CPAUSE, CSAVEMEM, CMAX );            { command types (do something) }
+  TCmdType = ( cNone, cKey, cRequest, cCommand );               { remote command types }
+  TRequestType = ( RPOWER, RPAUSE, RGETMEM, RVMEM, RSLEEP, RVERSION, RMAX );             { request types (ask for something) }
+  TCommandType = ( CPOWER, CPAUSE, CSAVEMEM, CLOADMEM, CRESET, CWAKEUP, CMAX );  { command types (do something) }
 
   { command descriptor }
   TCmd = record
         parserState: TCmdParserState;
         ctype: TCmdType;
+        keycode: integer;
         ch: char;
-        key: word;
         paramcount: integer;
         connId: integer;
         name: String[MAXCMDLEN];
@@ -38,8 +38,8 @@ type
     RcConnectedPanel: TPanel;
     RcActiveLed: TPanel;
     LedTimer: TTimer;
-    KeyUpTimer: TTimer;
-    QueueTimer: TTimer;
+    KeyUpTimer: TThreadedTimer;
+    QueueTimer: TThreadedTimer;
     procedure FormCreate(Sender: TObject);
     procedure RcSocketClientConnect(Sender: TObject;
       Socket: TCustomWinSocket);
@@ -75,8 +75,7 @@ type
         procedure ExecCmd(var c: TCmd);
         procedure ParseBuf(var buf: array of byte; len: integer; var cmd: TCmd);
         procedure SendResponse(connId: integer; var buf; len: integer);
-        procedure DispatchChar(c: char);
-        procedure DispatchKey (key: Word;  ss: TShiftState);
+        procedure DispatchKeyCode(kc:integer);
   public
         procedure ParseString(s: string);
     { Public declarations }
@@ -85,8 +84,16 @@ type
   { just a shim to access .Address of a TServerSocket }
   TBindingSocket = Class(TServerSocket);
 
+var
+  RemoteForm: TRemoteForm;
+
+implementation
+
+uses Main, Def, Cpu, Keyboard, Lcd, Serial;
+{$R *.DFM}
+
 const
-        KEYNCOUNT = 30;
+        KEYNCOUNT = 27;
         { list of key command tokens }
         KeyNameList: array [0..KEYNCOUNT-1] of String = (
                 'TAB', 'MEMO', 'IN', 'OUT', 'CALC', 'S',
@@ -95,47 +102,28 @@ const
                 'LEFT', 'DOWN', 'RIGHT', 'CAL',
                 'BRK', 'CLS', 'BS', 'EXE',
                 'M1', 'M2', 'M3', 'M4', 'ETC',
-                'RESET', 'NEWALLYESIMSURE','WAKEUP','POWER'
+                'NEWALLYESIMSURE'
+//                also: 'WAKEUP', 'NEWALL', 'RESET' are also handled as keys
         );
         { list of corresponding VK_ key codes }
-        KeyList: array [0..KEYNCOUNT-1] of Word = (
-                VK_TAB, 0, 0, 0, 0, VK_PRIOR,
-                VK_NEXT, VK_SPACE, VK_MENU,
-                VK_INSERT, VK_UP, VK_DELETE, VK_APPS,
-                VK_LEFT, VK_DOWN, VK_RIGHT, VK_APPS,
-                VK_ESCAPE, VK_F12, VK_BACK, VK_RETURN,
-                VK_F1, VK_F2, VK_F3, VK_F4, VK_F5,
-                VK_F9, VK_F8, VK_ESCAPE, VK_F9
+        KeyList: array [0..KEYNCOUNT-1] of Integer = (
+                KC_TAB, KC_MEMO, KC_IN, KC_OUT, KC_CALC, KC_SHIFT,
+                KC_CAPS, KC_SPC, KC_ANS,
+                KC_INS, KC_UP, KC_DEL, KC_MENU,
+                KC_LEFT, KC_DOWN, KC_RIGHT, KC_CAL,
+                KC_BRK, KC_CLS, KC_BS, KC_EXE,
+                KC_M1, KC_M2, KC_M3, KC_M4, KC_ETC,
+                KC_NEWALL
         );
-        { list of corresponding shift states to emulate }
-        SsList: array [0..KEYNCOUNT-1] of TShiftState = (
-                [], [], [], [], [], [],
-                [], [], [],
-                [], [], [], [],
-                [], [], [], [ssShift],
-                [], [], [], [],
-                [ssShift], [ssShift], [ssShift], [ssShift], [ssShift],
-                [], [], [ssShift], [ssShift]
-        );
-
         { list of request names - this MUST match the order of the TRequestType enum }
         RequestNameList: array [0..Integer(RMAX)-1] of String = (
-                'POWER', 'PAUSE', 'GETMEM', 'VMEM', 'VERSION'
+                'POWER', 'PAUSE', 'GETMEM', 'VMEM', 'SLEEP', 'VERSION'
         );
 
         { list of request names - this MUST match the order of the TRequestType enum }
         CommandNameList: array [0..Integer(CMAX)-1] of String = (
-                'POWER', 'PAUSE', 'SAVEMEM'
+                'POWER', 'PAUSE', 'SAVEMEM', 'LOADMEM', 'RESET', 'WAKEUP'
         );
-
-var
-  RemoteForm: TRemoteForm;
-
-implementation
-
-uses Main, Def, Lcd, Serial;
-
-{$R *.DFM}
 
 procedure TRemoteForm.FormCreate(Sender: TObject);
 var i: integer;
@@ -149,7 +137,7 @@ begin
 
    { key entry interval }
    QueueTimer.Interval := MainForm.KeyInterval;
-   KeyUpTimer.Interval := round(MainForm.KeyInterval / 2);
+   KeyUpTimer.Interval := round(MainForm.KeyInterval / 4);
 
    { populate KeyNameStrings with a list of names }
    KeyNameStrings := TStringList.Create;
@@ -280,29 +268,33 @@ begin
         end;
 
         case c.ctype of
-                { a simple character input }
-                cChar: dispatchChar(c.ch);
-
-                { virtual key }
+                { key entry }
                 cKey:  begin
                         { key code already specified }
-                        if c.key <> 0 then dispatchKey(c.key , []);
-                        { symbolic key name specified, look it up and dispatch the vk if found }
+                        if c.keycode <> 0 then dispatchKeyCode(c.keycode);
+                        { symbolic key name specified, look it up and dispatch the named key if found }
                         if c.name <> '' then
                         begin
                                 n := KeyNameStrings.IndexOf(c.name);
-                                if n >= 0 then dispatchKey(KeyList[n],SsList[n]);
+                                if n >= 0 then dispatchKeyCode(KeyList[n]);
 
-                                { response for 'POWER' key }
-                                if c.name = 'POWER' then
+                                if c.name='NEWALL' then
                                 begin
-                                        ResponseStr := 'POWER=';
-                                        if (flag and SW_bit) <> 0 then
-                                                ResponseStr := ResponseStr + 'ON'
-                                        else
-                                                ResponseStr := ResponseStr + 'OFF';
+                                        ResponseStr := 'REQUIRED=NEWALLYESIMSURE';
                                         SendResponse(c.connId, ResponseStr[1], Length(ResponseStr));
                                 end;
+
+                                if c.name='WAKEUP' then
+                                begin
+                                         CpuWakeup(False);
+                                end;
+
+                                if c.name='RESET' then
+                                begin
+                                         ResetAll;
+                                end;
+
+
                         end;
                 end; {cKey}
 
@@ -333,6 +325,15 @@ begin
                                                 SendResponse(c.connId, vbuf, LCDSIZE + 4);
                                                 exit;
                                         end; { VMEM? }
+                                        RSLEEP: begin
+                                                if (flag and APO_bit) <> 0 then
+                                                begin
+                                                        ResponseStr := 'SLEEP=ON';
+                                                end else
+                                                begin
+                                                        ResponseStr := 'SLEEP=OFF';
+                                                end;
+                                        end; {SLEEP?}
                                         RVERSION: begin
                                                  ResponseStr := 'EMVERSION,'+PLATFORM_ID+','+VERSION_STR;
                                         end; { VERSION? }
@@ -394,9 +395,29 @@ begin
                                         end; { PAUSE! }
 
                                         CSAVEMEM: begin
-                                                SaveState(false, false);
-                                                ResponseStr := 'SAVEMEM=OK';
+                                                if SaveState(false, false) then
+                                                        ResponseStr := 'SAVEMEM=OK'
+                                                else
+                                                        ResponseStr := 'SAVEMEM=FAIL';
                                         end; { SAVEMEM! }
+
+                                        CLOADMEM: begin
+                                                if LoadState(false, false) then
+                                                        ResponseStr := 'LOADMEM=OK'
+                                                else
+                                                        ResponseStr := 'LOADMEM=FAIL';
+                                        end; { LOADMEM! }
+
+                                        CRESET: begin
+                                                ResetAll;
+                                                ResponseStr := 'RESET=OK';
+                                        end; { RESET! }
+
+                                        CWAKEUP: begin
+                                                CpuWakeup(False);
+                                                ResponseStr := 'WAKEUP=OK';
+                                        end; { WAKEUP! }
+
                         end; {case}
                         { send response }
                         if ResponseStr <> '' then
@@ -441,8 +462,9 @@ procedure TRemoteForm.ParseBuf(var buf: array of byte; len: integer; var cmd: TC
 var
         c: char;
         b: byte;
-        i: integer;
-label keydone, tokenjump;
+        i, kc: integer;
+        sh: boolean;
+label keydone, tokenjump, keyjump;
 begin
     for i:= 0 to len - 1 do
     begin
@@ -457,10 +479,10 @@ begin
                         cmd.name := '';
                         { simple enter, del, bs }
                         case b of
-                                $08: begin cmd.ctype := cKey; cmd.key := VK_BACK; end;
-                                $09: begin cmd.ctype := cKey; cmd.key := VK_TAB; end;
-                                $0d,$0a: begin cmd.ctype := cKey; cmd.key := VK_RETURN; end;
-                                $7f: begin cmd.ctype := cKey; cmd.key := VK_DELETE; end;
+                                $08:     begin cmd.ctype := cKey; cmd.keycode := KC_BS; end;
+                                $09:     begin cmd.ctype := cKey; cmd.keycode := KC_TAB; end;
+                                $0d,$0a: begin cmd.ctype := cKey; cmd.keycode := KC_EXE; end;
+                                $7f:     begin cmd.ctype := cKey; cmd.keycode := KC_DEL; end;
                         end;
 
                         if cmd.ctype <> cNone then goto keydone;
@@ -483,12 +505,22 @@ begin
                                 cmd.ParserState := sToken;
                                 continue;
                         end;
-
+keyjump:
                         { a valid keyboard key }
-                        if (pos(c, Letters) > 0) or (pos(c, ShiftLetters) > 0)  then
+                        kc := GetCharacterCode(c, sh);
+                        cmd.keycode := 0;
+                        if (kc >0) then
                         begin
-                                cmd.ctype := cChar;
-                                cmd.ch := c;
+                                { key needs prepended with shift, queue that first }
+                                if sh then
+                                begin
+                                        cmd.ctype := cKey;
+                                        cmd.keycode := KC_SHIFT;
+                                        EnqueueCmd(cmd);
+                                end;
+
+                                cmd.ctype := cKey;
+                                cmd.keycode := kc;
                         end;
 keydone:
                         { command parsed, queue it for execution }
@@ -525,18 +557,15 @@ tokenjump:
 
                                 { '<' inside a token = we want a '<' entered and we escaped it with another '<' }
                                 '<': begin
-                                        cmd.ctype := cChar;
-                                        cmd.ch := c;
-                                        cmd.ParserState := sAny;
-                                        EnqueueCmd(cmd);
-                                        continue;
+                                        cmd.parserState := sAny;
+                                        { short-circuit to process the key }
+                                        goto keyjump;
                                 end;
                                 { <NAME?> is a request }
                                 '?': begin
                                         cmd.cType := cRequest;
                                         continue;
                                 end;
-
 
                                 { <NAME!> is a command }
                                 '!': begin
@@ -549,7 +578,7 @@ tokenjump:
                                         { if it's not a request ('?') or command ('!') then it's a named key }
                                         if not (cmd.cType in [ cRequest, cCommand ]) then cmd.ctype := cKey;
                                         { no key number, work with key name }
-                                        cmd.key := 0;
+                                        cmd.keycode := 0;
                                         { reset parser state }
                                         cmd.ParserState := sAny;
                                         EnqueueCmd(cmd);
@@ -591,12 +620,12 @@ tokenjump:
                 sCsi: begin
                         cmd.ctype := cNone;
                         case c of
-                                'A': begin cmd.ctype := cKey; cmd.key := VK_UP; end;
-                                'B': begin cmd.ctype := cKey; cmd.key := VK_DOWN; end;
+                                'A': begin cmd.ctype := cKey; cmd.keycode := KC_UP; end;
+                                'B': begin cmd.ctype := cKey; cmd.keycode := KC_DOWN; end;
                                 { I always lauged at how ANSI made sure that RIGHT goes before LEFT. }
                                 { It's actually Forward and Backward, but this only emphasises the sentiment }
-                                'C': begin cmd.ctype := cKey; cmd.key := VK_RIGHT; end;
-                                'D': begin cmd.ctype := cKey; cmd.key := VK_LEFT; end;
+                                'C': begin cmd.ctype := cKey; cmd.keycode := KC_RIGHT; end;
+                                'D': begin cmd.ctype := cKey; cmd.keycode := KC_LEFT; end;
                         end;
                         cmd.ParserState := sAny;
 
@@ -609,17 +638,11 @@ tokenjump:
 end;
 
 { send a character to the keyboard }
-procedure TRemoteForm.DispatchChar(c: char);
+procedure TRemoteForm.DispatchKeyCode(kc: integer);
 begin
-       MainForm.FormKeyPress(nil, c);
+       SendKeyCode(kc);
+       if kc = KC_BRK then CpuWakeup(False);
        KeyUpTimer.Enabled := True;
-end;
-
-{ send a vk_ to the keyboard }
-procedure TRemoteForm.DispatchKey (key: Word; ss: TShiftState);
-begin
-        MainForm.FormKeyDown(nil, key, ss);
-        KeyUpTimer.Enabled := True;
 end;
 
 { data has arrived at the socket }
@@ -696,11 +719,9 @@ begin
 end;
 
 procedure TRemoteForm.KeyUpTimerTimer(Sender: TObject);
-var key: word;
 begin
+     SendKeyCode(KC_NONE);
      KeyUpTimer.Enabled := false;
-     key := 0;
-     MainForm.FormKeyUp(nil, key, []);
 end;
 
 procedure TRemoteForm.FormDestroy(Sender: TObject);
@@ -713,7 +734,7 @@ end;
 { keep picking up requests from the queue }
 procedure TRemoteForm.QueueTimerTimer(Sender: TObject);
 begin
-        DequeueCmd;
+        if not KeyUpTimer.Enabled then DequeueCmd;
 end;
 
 end.
