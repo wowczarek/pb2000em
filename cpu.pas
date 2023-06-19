@@ -3,6 +3,7 @@ unit Cpu;
 interface
 
   procedure CpuReset;
+  procedure ResetAll;
   procedure CpuWakeUp (apo_value: boolean);
   procedure SetIfl (int_bit: byte);
   function CpuRun : integer;
@@ -10,10 +11,20 @@ interface
 
 implementation
 
-  uses Def, Decoder, Port, Serial;
+  uses Def, Decoder, Port, Serial, Lcd;
 
   type Proc1 = procedure;
 
+procedure ResetAll;
+begin
+   lcdctrl := 0;
+   LcdInit;
+   pdi := (pdi and $03) or $F8;
+   pe := $00;
+   IoInit;
+   ptrw(memdef[GATEARRAY].storage)^ := 0;
+  CpuReset;
+end {ResetAll};
 
   procedure CpuReset;
   begin
