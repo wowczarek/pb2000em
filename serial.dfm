@@ -1,6 +1,6 @@
 object SerialForm: TSerialForm
-  Left = 272
-  Top = 395
+  Left = 312
+  Top = 409
   BorderIcons = [biSystemMenu]
   BorderStyle = bsDialog
   Caption = 'Serial Port Monitor'
