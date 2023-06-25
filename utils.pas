@@ -41,6 +41,7 @@ type
         WakeUpTimer: TTHreadedTimer;
         procedure SetFillLevel(l: integer);
         procedure SetDelay(d: integer);
+        procedure SetQueuePolicy(qp: TQueuePolicy);
         { the actual moving of data, but without pumping }
         function FEnqueue(var src: array of byte; len: Integer): Integer;
         function FDequeue(var dst: array of byte; len: Integer): Integer;
@@ -51,7 +52,7 @@ type
 
   public
 
-        QueuePolicy: TQueuePolicy;
+        FQueuePolicy: TQueuePolicy;
         OnReady: TNotifyEvent;
         Name: String;
         procedure Flush;
@@ -67,6 +68,7 @@ type
         property Capacity: Integer read FCapacity;
         property Count: Integer read FCount;
         property Left: Integer read FLeft;
+        property QueuePolicy: TQueuePolicy read FQueuePolicy write SetQueuePolicy;
         property FillLevel: Integer read FFillLevel write SetFillLevel;
         property Delay: Integer read FDelay write SetDelay;
         property Ready: Boolean read FReady;
@@ -124,7 +126,7 @@ begin
         FSink           := Nil;
         Waiting         := False;
         FReady          := True;
-        QueuePolicy     := QPNone;
+        FQueuePolicy     := QPNone;
         Timer           := TThreadedTimer.Create(nil);
         Timer.Interval  := 1;
         WakeUpTimer     := TThreadedTimer.Create(nil);
@@ -138,8 +140,27 @@ end;
 
 destructor TBytePump.Destroy;
 begin
+        Timer.Enabled := False;
+        WakeUpTimer.Enabled := False;
         Unplumb;
 end;
+
+procedure TBytePump.SetQueuePolicy(qp: TQueuePolicy);
+begin
+        if FQueuePolicy = qp then exit;
+
+        if qp = QPNone then
+        begin
+                SetLength(Pipe, FCapacity);
+        end else
+        begin
+                SetLength(Pipe, FFillLevel);
+        end;
+
+        FQueuePolicy := qp;
+
+end;
+
 
 procedure TBytePump.SetFillLevel(l: Integer);
 begin
@@ -250,7 +271,7 @@ begin
 
         if not assigned(FSource) or (FLeft < 1) then exit;
 
-        case QueuePolicy of
+        case FQueuePolicy of
 
                 { Wait: only pull more data through the pipe if we're ready }
                 QPWait: begin
@@ -258,14 +279,14 @@ begin
                                 if FillLeft < 1 then FillLeft := 0;
                                 if Ready and (FillLeft > 0) then begin
                                         len := FSource.Dequeue(Pipe, FillLeft);
-                                        Enqueue(Pipe, len);
+                                        if len > 0 then Enqueue(Pipe, len);
                                 end;
                 end;
 
                 { None: always attempt to pull data from source }
                 QPNone: begin
                         len := FSource.Dequeue(Pipe, FLeft);
-                        Enqueue(Pipe, len);
+                        if len > 0 then Enqueue(Pipe, len);
                 end;
 
         end;
@@ -282,7 +303,7 @@ begin
 
         if len <  1 then exit;
 
-        if (QueuePolicy = QPWait) and (not Ready) then exit;
+        if (FQueuePolicy = QPWait) and (not Ready) then exit;
 
         { no space left }
         if FLeft <= 0 then exit;
@@ -290,7 +311,7 @@ begin
         if FLeft < len then len := FLeft;
 
         { only fill up to fill level, no more }
-        if QueuePolicy = QPWait then
+        if FQueuePolicy = QPWait then
         begin
             if ((len + FCount) >= FFillLevel) then len := FFillLevel - FCount;
             { queue fill level reached }
@@ -320,7 +341,7 @@ begin
         Dec(FLeft, len);
 
         { we reached our fill level - stop pumping notify }
-        if (QueuePolicy = QPWait) and (FCount >= FFillLevel) then
+        if (FQueuePolicy = QPWait) and (FCount >= FFillLevel) then
         begin
                 FReady := False;
                 WakeUpTimer.Enabled := True;
@@ -371,7 +392,7 @@ begin
         Inc(FLeft, len);
 
         { queue emptied - delay notification if delay specified }
-        if (QueuePolicy = QPWait) and (FCount = 0) then
+        if (FQueuePolicy = QPWait) and (FCount = 0) then
         begin
                 if Delay > 0 then
                 begin

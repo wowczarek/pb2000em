@@ -254,7 +254,7 @@ procedure TSerialForm.SerialEnabled(en: Boolean);
 begin
         Enabled := en;
         PBMonitor.Enabled := Enabled;
-        QueueMonitor.Enabled := Enabled;
+        EofBtn.Enabled := Enabled;
         ClientMonitor.Enabled := Enabled;
         if Enabled
                 then SerialForm.Caption := 'Serial Port Monitor'
@@ -343,7 +343,7 @@ begin
         CasioTxIncrement(1);
 end;
 
-{ queue an incoming chunk of data onto the RxQueue ring buffer }
+{ queue an incoming chunk of data onto the RxBuffer ring buffer }
 procedure TSerialForm.RxEnqueue(buf: array of byte; len: integer);
 var
         i,res: integer;
@@ -372,7 +372,7 @@ var
         buf: array [0..1] of byte;
 begin
         Result := False;
-        if RxQueue.Dequeue(buf, 1) > 0 then
+        if RxQueue.Dequeue(buf, 1) = 1 then
         begin
                 b := buf[0];
                 Int1Set := False;
@@ -687,6 +687,9 @@ end;
 { all she wrote }
 procedure TSerialForm.FormDestroy(Sender: TObject);
 begin
+
+        Int1Timer.Enabled := False;
+        LedTimer.Enabled := False;
 
         { revisit what needs freed, but this is on exit, so... }
 
