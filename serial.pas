@@ -105,6 +105,7 @@ type
     procedure BlockDelayChange(Sender: TObject);
     procedure EofBtnClick(Sender: TObject);
     procedure cbXonXoffClick(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
   private
     { Private declarations }
         { counters }
@@ -149,6 +150,7 @@ type
 
 var
   SerialForm: TSerialForm;
+  gotClosed:boolean;
 implementation
 
 uses Def, Cpu, Port, Main;
@@ -441,6 +443,7 @@ end;
 { initialisation tasks }
 procedure TSerialForm.FormCreate(Sender: TObject);
 begin
+        gotClosed := false;
         SerialEnabled(True);
         Int1Set := False;
         Int1Enabled := False;
@@ -452,13 +455,10 @@ begin
         RxQueue.FillLevel := DEFQFIL;
         RxQueue.Source(RxBuffer);
         RxQueue.QueuePolicy := QPWait;
-        cbBlocks.Checked := True;
-        cbBlocks.OnClick(nil);
         RxQueue.Delay := AutoDelay;
         RxQueue.OnReady := DataReady;
         QueueBar.Max := RXQUEUESIZE;
         BufferBar.Max := RXBUFSIZE;
-
         QueueLabel.Parent := QueueBar;
         QueueLabel.AutoSize := False;
         QueueLabel.Transparent := True;
@@ -501,7 +501,15 @@ begin
         end else begin
                 ClientMonitor.Caption := 'TCP Client (not configured)';
         end;
-    end { if OptionCode }
+    end; { if OptionCode }
+
+    if mainform.serialblock then casiorxhex.Lines.add('serialblock on') else casiorxhex.Lines.add('serialblock off')
+    if mainform.serialxoff then casiorxhex.Lines.add('serialxoff on') else casiorxhex.Lines.add('serialxoff off')
+    cbBlocks.Checked := MainForm.SerialBlock;
+    cbBlocks.onClick(nil);
+    cbXonXoff.Checked := MainForm.SerialXoff;
+    cbXonXoff.onClick(nil);
+
 end;
 
 { a trivial way to blink LEDs. Incoming data lights them up, this periodically switches them all off }
@@ -535,8 +543,8 @@ procedure TSerialForm.SerialSocketClientConnect(Sender: TObject;
                         Connections[1].Close;
                 end else
                 begin
-                        { display the window when a client connects, but don't take focus away from main window }
-                        if not Visible then
+                        { if we haven't closed this window once, display the window when a client connects, but don't take focus away from main window }
+                        if (not gotClosed) and (not Visible) then
                         begin
                                 MainForm.Show;
                                 Show;
@@ -757,6 +765,11 @@ procedure TSerialForm.cbXonXoffClick(Sender: TObject);
 begin
         XoffEnabled := cbXonXoff.Checked;
         if not XoffEnabled then XonWait := False;
+end;
+
+procedure TSerialForm.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+        gotClosed := true;
 end;
 
 end.

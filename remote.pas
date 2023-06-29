@@ -58,6 +58,7 @@ type
     procedure KeyUpTimerTimer(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure QueueTimerTimer(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
     private
     { Private declarations }
         CmdCache: Array [0..MAXCONNECTIONS] of TCmd; { MAXCONNECTIONS + last one for string macros }
@@ -86,7 +87,7 @@ type
 
 var
   RemoteForm: TRemoteForm;
-
+  gotClosed: boolean;
 implementation
 
 uses Main, Def, Cpu, Keyboard, Lcd, Serial;
@@ -128,7 +129,7 @@ const
 procedure TRemoteForm.FormCreate(Sender: TObject);
 var i: integer;
 begin
-
+    gotClosed := false;
     CmdQueued := 0;
     CmdQueueRead := 0;
     CmdQueueWrite := 0;
@@ -178,8 +179,8 @@ begin
                 end else
                 begin
                         RcConnectedPanel.Caption := IntToStr(ActiveConnections)+' connected (Port: '+IntToStr(MainForm.RemotePort)+')';
-                        { display the window when a client connects, but don't take focus away from main window }
-                        if not Visible then
+                        { if we haven't closed this window once, display the window when a client connects, but don't take focus away from main window }
+                        if (not gotClosed) and (not Visible) then
                         begin
                                 MainForm.Show;
                                 Show;
@@ -735,6 +736,11 @@ end;
 procedure TRemoteForm.QueueTimerTimer(Sender: TObject);
 begin
         if not KeyUpTimer.Enabled then DequeueCmd;
+end;
+
+procedure TRemoteForm.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+        gotClosed := true;
 end;
 
 end.
