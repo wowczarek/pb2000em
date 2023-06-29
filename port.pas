@@ -106,7 +106,6 @@ end {IoInit};
 procedure IoClose;
 begin
   MainForm.FddSocket.Close;
-  SerialForm.SerialSocket.Close;
 end {IoClose};
 
 { transmit a byte out through serial port }
