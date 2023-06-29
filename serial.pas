@@ -123,7 +123,7 @@ type
         _XonWait: Boolean;
         XoffEnabled: Boolean;
         { is this thing on? }
-        Enabled: Boolean;
+        ImEnabled: Boolean;
         { calculate automatic block delay }
         function AutoDelay: Integer;
         procedure SetXonWait(x: Boolean);
@@ -254,11 +254,11 @@ end;
 { visual indication of port being active / inactive on sleep / wake up }
 procedure TSerialForm.SerialEnabled(en: Boolean);
 begin
-        Enabled := en;
-        PBMonitor.Enabled := Enabled;
-        EofBtn.Enabled := Enabled;
-        ClientMonitor.Enabled := Enabled;
-        if Enabled
+        ImEnabled := en;
+        PBMonitor.Enabled := ImEnabled;
+        EofBtn.Enabled := ImEnabled;
+        ClientMonitor.Enabled := ImEnabled;
+        if ImEnabled
                 then SerialForm.Caption := 'Serial Port Monitor'
                 else SerialForm.Caption := 'Serial Port Monitor (CPU sleeping - not forwarding data)';
 end;
@@ -352,7 +352,7 @@ var
 begin
 
         if len < 1 then exit;
-        if not Enabled then exit;
+        if not ImEnabled then exit;
 
         res := RxBuffer.Enqueue(buf[0],len);
 
@@ -503,11 +503,9 @@ begin
         end;
     end; { if OptionCode }
 
-    if mainform.serialblock then casiorxhex.Lines.add('serialblock on') else casiorxhex.Lines.add('serialblock off')
-    if mainform.serialxoff then casiorxhex.Lines.add('serialxoff on') else casiorxhex.Lines.add('serialxoff off')
     cbBlocks.Checked := MainForm.SerialBlock;
     cbBlocks.onClick(nil);
-    cbXonXoff.Checked := MainForm.SerialXoff;
+    cbXonXoff.Checked := MainForm.SerialXoffXon;
     cbXonXoff.onClick(nil);
 
 end;
@@ -544,7 +542,7 @@ procedure TSerialForm.SerialSocketClientConnect(Sender: TObject;
                 end else
                 begin
                         { if we haven't closed this window once, display the window when a client connects, but don't take focus away from main window }
-                        if (not gotClosed) and (not Visible) then
+                        if MainForm.SerialPopup and (not gotClosed) and (not Visible) then
                         begin
                                 MainForm.Show;
                                 Show;
