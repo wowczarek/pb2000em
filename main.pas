@@ -42,10 +42,18 @@ type
         SerialPort: Integer;
         { address we listen on for serial connections }
         SerialAddress: String;
+        { do we want block-based serial transfer by default ? }
+        SerialBlock: Boolean;
+        { do we want Xoff/Xon on by default? }
+        SerialXoffXon: Boolean;
+        { do we want the serial window to pop up when a client first connects }
+        SerialPopup: Boolean;
         { address we listen on for remote connections }
         RemoteAddress: String;
         { TCP port that the remote control module will listen on }
         RemotePort: Integer;
+        { do we want the remote window to pop up when a client first connects }
+        Remotepopup: Boolean;
         { remote key entry interval }
         KeyInterval: Integer;
     { Public declarations }
@@ -561,6 +569,7 @@ begin
   Ini1 := TIniFile.Create (ExpandFileName(IniName));
   with Ini1 do
   begin
+
     OscFreq := ReadInteger ('Settings', 'OscFreq', DEF_FREQ);
     OptionCode := byte (ReadInteger ('Settings', 'OptionCode', OC_NONE));
     InterfaceType := UpperCase(ReadString('Settings','Interface',''));
@@ -576,12 +585,21 @@ begin
     MainForm.SerialPort := ReadInteger ('Serial', 'Port', 0);
     { Serial port listen address }
     MainForm.SerialAddress := ReadString('Serial', 'Listen', '127.0.0.1');
+    { Block transfer}
+    MainForm.SerialBlock := ReadBool('Serial','BlockTransfer', true);
+    { Xoff/Xon }
+    MainForm.SerialXoffXon := ReadBool('Serial','XoffXon', false);
+    { serial window pop up }
+    MainForm.Serialpopup := ReadBool('Serial','Popup', true);
     { Remote control port }
     MainForm.RemotePort := ReadInteger ('Remote', 'Port', 0);
     { Remote control listen address }
     MainForm.RemoteAddress := ReadString('Remote', 'Listen', '127.0.0.1');
+    { remote control window pop up }
+    MainForm.Remotepopup := ReadBool('Remote','Popup', true);
     { Remote control key input interval in ms (keyup = half time) }
     MainForm.KeyInterval := ReadInteger ('Remote', 'Interval', 100);
+    { key macro to be executed on startup }
     MacroString := ReadString('Remote','Autorun','');
   end {with};
   Ini1.Free;
@@ -644,6 +662,7 @@ begin
   LcdBmp.Free;
   KeyBmp.Free;
   OverlayBmp.Free;
+  RemoteForm.RcSocket.Close;
 end;
 
 
