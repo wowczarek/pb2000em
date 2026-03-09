@@ -440,9 +440,4 @@ object SerialForm: TSerialForm
     OnClientError = SerialSocketClientError
     Left = 112
   end
-  object Int1Timer: TThreadedTimer
-    Interval = 1
-    OnTimer = Int1TimerTimer
-    Left = 80
-  end
 end

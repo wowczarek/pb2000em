@@ -1,4 +1,12 @@
-version 26-wo - ongoing
+version 30-wo - ongoing
+
+- code re-sync for Piotr's v30 
+- Piotr's changes to LCD drawing and LCD control register
+- TThreadedTimer component no longer needs installed
+- NOT removing the networked FDD emulation code (v28)
+- NOT touching the I/O code (v27)
+
+version 26-wo - 2023/06/29
 
 - implemented serial port support (F4 key to view status)
 - implemented a remote control protocol (F5 key to view status)
