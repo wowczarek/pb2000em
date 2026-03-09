@@ -1,18 +1,22 @@
+{ To reduce flicker on older computers, the application draws on the screen
+ outside of OnPaint events, which is against the rules but somehow used to
+ work. However, it's not more the case with newer versions of compilers. As
+ a workaround, all instances of MainForm.Canvas.Draw outside the FormPaint
+ procedure can be replaced with MainForm.Invalidate as marked in the script. }
+
 unit Main;
 
 interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtCtrls, StdCtrls, IniFiles, ThdTimer, ScktComp;
+  Dialogs, ExtCtrls, StdCtrls, IniFiles, ThdTimer;
 
 type
   TMainForm = class(TForm)
-    RunTimer: TThreadedTimer;
     RefreshTimer: TTimer;
     SecTimer: TTimer;
-    FddSocket: TClientSocket;
-    procedure OnRunTimer(Sender: TObject);
+    OpenDialog1: TOpenDialog;
     procedure OnRefreshTimer(Sender: TObject);
     procedure OnSecTimer(Sender: TObject);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton;
@@ -23,6 +27,7 @@ type
       Y: Integer);
     procedure FormShow(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormKeyPress(Sender: TObject; var Key: Char);
     procedure FormKeyDown(Sender: TObject; var Key: Word;
@@ -33,7 +38,8 @@ type
     procedure FormDeactivate(Sender: TObject);
     procedure ApplicationDeactivate(Sender: TObject);
   private
-    { Private declarations }
+    RunTimer: TThreadedTimer;
+    procedure OnRunTimer(Sender: TObject);
   public
     { Public declarations }
   end;
@@ -46,7 +52,7 @@ implementation
 {$R *.dfm}
 
 uses
-    Def, Cpu, Debug, Keyboard, Lcd, Port;
+    Def, Cpu, Debug, Keyboard, Lcd, Port, Comm, Fdd, Bios;
 
 const
     FaceName: string = 'face.bmp';
@@ -59,14 +65,14 @@ const
     SaveMsg: string = 'Failed to save the file ';
 
 var
-    BitMap, Face, LcdBmp, KeyBmp, OverlayBmp: TBitMap;
+    BitMap, FaceBmp, LcdBmp, KeyBmp, OverlayBmp: TBitMap;
     RedrawReq: boolean;		{ true if the LcdBmp image has changed and
 				  needs to be redrawn }
 
 { LCD }
     BkColor: TColor = clWhite;
     ScrMem: array[0..LCDSIZE-1] of nibble; { shadow LCD data memory }
-    ScrCtrl: byte;			{ shadow LCD control register }
+    ScrCtrl: cardinal;			{ shadow LCD control register }
 
 { CPU }
     CpuSpeed: integer;		{ how many instructions executes the emulated
@@ -74,6 +80,9 @@ var
     OnCounter: integer = 0;
     PulseCounter: integer = 0;
     RunTimerFrequency: integer;
+
+{ Serial Port }
+    SerialCounter: integer = 0;
 
 { keyboard }
     keypads1: integer = KEYPADS;
@@ -95,21 +104,23 @@ end {ResetAll};
 { draws the image of a key from the KeyBmp }
 procedure DrawKey (index, x, y: integer; pressed: boolean);
 var
-  offset: word;
+  offset: integer;
 begin
-  with keypad[index] do
+  with keypad[index], BitMap do
   begin
-    BitMap.Width := W;
-    BitMap.Height := H;
+    Width := W;
+    Height := H;
     if (pressed) then offset := 0 else offset := W;
-    BitMap.Canvas.Draw (-OX - offset, -OY, KeyBmp);
+    Canvas.CopyRect (Rect(0, 0, W, H), KeyBmp.Canvas,
+		Rect(OX+offset, OY, OX+offset+W, OY+H));
+    TransparentColor := $00FFFFFF;
+    Transparent := True;
+    FaceBmp.Canvas.Draw (x, y, BitMap);
+    Transparent := False;
+    Canvas.CopyRect (Rect(0, 0, W, H), FaceBmp.Canvas, Rect(x, y, x+W, y+H));
   end {with};
-  BitMap.TransparentColor := $00FFFFFF;
-  BitMap.Transparent := True;
-  Face.Canvas.Draw (x, y, BitMap);
-  BitMap.Transparent := False;
-  BitMap.Canvas.Draw (-x, -y, Face);
-  MainForm.Canvas.Draw (x, y, BitMap);
+  MainForm.Canvas.Draw (x, y, BitMap);	{ replace with MainForm.Invalidate;
+					  to comply with the rules }
 end {DrawKey};
 
 
@@ -124,10 +135,10 @@ begin
     Brush.Style := bsSolid;
 
 { handle the LCD control register }
-    if ScrCtrl <> lcdctrl then
+    if ScrCtrl <> cardinal(lcdctrl) then
     begin
       RedrawReq := True;
-      ScrCtrl := lcdctrl;
+      ScrCtrl := cardinal(lcdctrl);
       if (ScrCtrl and VDD2_bit) <> 0 then
       begin	{turn the display on}
 { it is assummed that the lcdimage is cleared when the LCD is turned off }
@@ -191,7 +202,9 @@ procedure TMainForm.OnRefreshTimer(Sender: TObject);
 begin
   LcdRender;
   View;
-  if RedrawReq = True then Canvas.Draw (63, 45, LcdBmp);
+  if RedrawReq = True then
+	Canvas.Draw (63, 45, LcdBmp);	{ replace with Invalidate;
+					  to comply with the rules }
   RedrawReq := False;
 end;
 
@@ -239,11 +252,15 @@ begin
       else
 { shift the key label upwards to get an impression of a released key }
       begin
-        BitMap.Width := W-8;
-        BitMap.Height := H-8;
-        BitMap.Transparent := False;
-        BitMap.Canvas.Draw (-c-5, -r-5, Face);
-        Face.Canvas.Draw (c+4, r+4, BitMap);
+        with BitMap do
+        begin
+          Width := W-8;
+          Height := H-8;
+          Transparent := False;
+          Canvas.CopyRect (Rect(0, 0, Width, Height), FaceBmp.Canvas,
+			Rect(c+5, r+5, Width+c+5, Height+r+5));
+        end {with};
+        FaceBmp.Canvas.Draw (c+4, r+4, BitMap);
         DrawKey (i, c, r, False);
       end {if};
       KeyCode1 := 0;
@@ -286,11 +303,15 @@ begin
           else
 { shift the key label down-right to get an impression of a pressed key }
           begin
-            BitMap.Width := W-8;
-            BitMap.Height := H-8;
-            BitMap.Transparent := False;
-            BitMap.Canvas.Draw (-c-4, -r-4, Face);
-            Face.Canvas.Draw (c+5, r+5, BitMap);
+            with BitMap do
+            begin
+              Width := W-8;
+              Height := H-8;
+              Transparent := False;
+              Canvas.CopyRect (Rect(0, 0, Width, Height), FaceBmp.Canvas,
+				Rect(c+4, r+4, Width+c+4, Height+r+4));
+            end {with};
+            FaceBmp.Canvas.Draw (c+5, r+5, BitMap);
             DrawKey (i, c, r, True);
           end {if};
           break;
@@ -380,17 +401,17 @@ begin
   else
     MessageDlg (LoadMsg + OverlayName, mtWarning, [mbOk], 0);
   OverlayBmp.Transparent := False;
-{ draw the background image on the Face.Canvas }
+{ draw the background image on the FaceBmp.Canvas }
   if FileExists (FaceName) then
   begin
     BitMap.LoadFromFile (FaceName);
     BitMap.Transparent := False;
-    Face.Canvas.Draw (0, 0, BitMap);
+    FaceBmp.Canvas.Draw (0, 0, BitMap);
     MainForm.Invalidate;
   end
   else
     MessageDlg (LoadMsg + FaceName, mtWarning, [mbOk], 0);
-  Face.Transparent := False;
+  FaceBmp.Transparent := False;
 { clear the LCD area }
   with LcdBmp.Canvas do
   begin
@@ -403,7 +424,7 @@ begin
      FileExists (memdef[ROM3].filename) then pdi := pdi and $FD;
 { select between the English/Japanese version depending on the absence/presence
   of the KANA key }
-  with Face.Canvas, keypad[KEYPADS] do
+  with FaceBmp.Canvas, keypad[KEYPADS] do
   begin
     if Pixels [L-1, T] = Pixels [L, T] then	{no KANA key present}
     begin
@@ -415,7 +436,7 @@ begin
   CpuSpeed := OscFreq * integer(RunTimer.Interval);
   ResetAll;
   flag := SW_bit;		{ power switch on }
-  ScrCtrl := not lcdctrl;	{ invalidate the shadow LCD control register }
+  ScrCtrl := $100;		{ invalidate the shadow LCD control register }
   RunTimer.Enabled := True;
   RefreshTimer.Enabled := True;
   SecTimer.Enabled := True;
@@ -465,9 +486,7 @@ begin
   with Ini1 do
   begin
     OscFreq := ReadInteger ('Settings', 'OscFreq', 910);
-    OptionCode := byte (ReadInteger ('Settings', 'OptionCode', 255));
-    MainForm.FddSocket.Address := ReadString ('Floppy Disk Drive', 'Address', '');
-    MainForm.FddSocket.Port := ReadInteger ('Floppy Disk Drive', 'Port', 0);
+    diskname := ExpandFileName (ReadString ('FDD', 'DiskName', 'disk0.bin'));
   end {with};
   Ini1.Free;
 end {IniLoad};
@@ -480,9 +499,9 @@ var
 begin
   Brush.Style := bsClear;	{ transparent form }
   BitMap := TBitMap.Create;
-  Face := TBitMap.Create;
-  Face.Width := 673;
-  Face.Height := 294;
+  FaceBmp := TBitMap.Create;
+  FaceBmp.Width := 673;
+  FaceBmp.Height := 294;
   LcdBmp := TBitMap.Create;
   LcdBmp.Width := 384;
   LcdBmp.Height := 64;
@@ -529,6 +548,10 @@ begin
     end {with};
   end {for};
   IniLoad;
+  FddOpen;
+  RunTimer := TThreadedTimer.Create(Self);
+  RunTimer.Interval := 10;
+  RunTimer.OnTimer := OnRunTimer;
   RunTimerFrequency := 1000 div RunTimer.Interval;
 end;
 
@@ -545,6 +568,7 @@ begin
   RunTimer.Enabled := False;
   RefreshTimer.Enabled := False;
   SecTimer.Enabled := False;
+  FddClose;
   IoClose;
 { save the register file image }
   ptrw(@mr[32])^ := ss;
@@ -570,23 +594,24 @@ begin
     end {with};
   end {for};
   BitMap.Free;
-  Face.Free;
+  FaceBmp.Free;
   LcdBmp.Free;
   KeyBmp.Free;
   OverlayBmp.Free;
 end;
 
 
+procedure TMainForm.FormDestroy(Sender: TObject);
+begin
+  RunTimer.Free;
+end;
+
+
 { show/hide the keyboard overlay }
 procedure OverlayFlip;
 var
-  Temp: TBitMap;
   i, y, r: integer;
 begin
-  Temp := TBitMap.Create;
-  Temp.Width := 432;
-  Temp.Height := 6;
-  Temp.Transparent := False;
   BitMap.Width := 432;
   BitMap.Height := 6;
   BitMap.Transparent := False;
@@ -594,15 +619,15 @@ begin
   r := 224;
   for i := 0 to 1 do
   begin
-    Temp.Canvas.Draw (-58, -r, Face);
-    BitMap.Canvas.Draw (0, -y, OverlayBmp);
-    OverlayBmp.Canvas.Draw (0, y, Temp);
-    Face.Canvas.Draw (58, r, BitMap);
-    MainForm.Canvas.Draw (58, r, BitMap);
+    BitMap.Canvas.CopyRect (Rect(0, 0, 432, 6), FaceBmp.Canvas,
+			Rect(58, r, 58+432, r+6));
+    FaceBmp.Canvas.CopyRect (Rect(58, r, 58+432, r+6), OverlayBmp.Canvas,
+			Rect(0, y, 432, y+6));
+    OverlayBmp.Canvas.Draw (0, y, BitMap);
     Inc (y, 6);
     Inc (r, 33);
   end {for};
-  Temp.Free;
+  MainForm.Invalidate;
 end {OverlayFlip};
 
 
@@ -632,7 +657,7 @@ procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
 var
   save: integer;
 begin
-  save := Key;
+  save := KeyCode2;
   case Key of
     VK_NEXT:	KeyCode2 := 46;	{ CAPS }
     VK_PRIOR:	KeyCode2 := 15;	{ red S }
@@ -647,10 +672,17 @@ begin
     VK_DOWN:	KeyCode2 := 54;	{ down }
     VK_F2:	OverlayFlip;
     VK_F3:	DebugForm.Show;
+    VK_F4:	if not (ssShift in Shift) then CommForm.Show
+                else if OpenDialog1.Execute then
+		begin
+		  diskname := OpenDialog1.FileName;
+		  FddClose;
+		  FddOpen;
+		end {if};
     VK_F8:	KeyCode2 := 82;	{ New All }
     VK_F9:	ResetAll;
   end {case};
-  if (save <> Key) then KeyInterrupt;
+  if (save <> KeyCode2) then KeyInterrupt;
 end;
 
 
@@ -663,8 +695,8 @@ end;
 
 procedure TMainForm.FormPaint(Sender: TObject);
 begin
-  Face.Canvas.Draw (63, 45, LcdBmp);
-  Canvas.Draw (0, 0, Face);
+  FaceBmp.Canvas.Draw (63, 45, LcdBmp);
+  Canvas.Draw (0, 0, FaceBmp);
   RedrawReq := False;
 end;
 
@@ -692,9 +724,9 @@ begin
     Dec (acycles, x);
 
 { INT1 interrupt, edge triggered }
-    if (((ky and $0800) = 0) xor ((delayed_ky and $0800) = 0))	{ edge test }
+    if ((ky and $0800) <> (delayed_ky and $0800))	{ edge test }
         and
-      (((ky and $0800) = 0) xor ((ie and $02) <> 0))		{ level test }
+      ((ky and $0800) = 0) = ((ie and $02) = 0)		{ level test }
         then
       SetIfl (INT1_bit);
     delayed_ky := ky;
@@ -723,6 +755,17 @@ begin
       Inc (PulseCounter, CpuSpeed * RunTimerFrequency);
       if ((ia and $80) = 0) then SetIfl (KEYPULSE_bit);
     end {if};
+
+{ Serial Port bit shift pulse }
+    Dec (SerialCounter, x);
+    if SerialCounter < 0 then
+    begin
+      Inc (SerialCounter, SerialRate);
+      if SerialCounter < 0 then SerialCounter := SerialRate;
+      OnSerialTick;
+    end {if};
+
+    if CommDelayTimer > 0 then Dec (CommDelayTimer, x);
 
     if CpuSteps > 0 then
     begin

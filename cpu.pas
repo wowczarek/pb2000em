@@ -17,7 +17,6 @@ implementation
 
   procedure CpuReset;
   begin
-    procptr := nil;
     pc := $0000;
     ua := 0;
     delayed_ua := ua;
@@ -29,6 +28,7 @@ implementation
     iserv := 0;
     speed := 0;
     acycles := 0;
+    CpuSleep := False;
   end {CpuReset};
 
 
@@ -92,13 +92,15 @@ implementation
       else
       begin
 { execute an instruction }
+        procindex := 0;
         ExecInstr;
 { complete an optional I/O device write }
-        if procptr <> nil then
+        i := 0;
+        while i < procindex do
         begin
-          Proc1(procptr);
-          procptr := nil;
-        end {if};
+          Proc1(procptr[i]);
+          Inc(i);
+        end {while};
       end {if};
     end {if};
     if iserv = 0 then cycles := cycles shl speed;

@@ -1,3 +1,21 @@
+version 30, 2026/03/07
+
+- user programs can no longer corrupt the FDD and LCD subsystems
+- the ThdTimer component no longer needs to be installed on the tool palette
+- the more effective CopyRect method is used to copy rectangular bitmap slices
+
+
+version 28 - 2025/01/20
+
+- included full MD-100 emulation: serial port, printer, floppy disk drive
+- removed FDD support over the network
+
+
+version 27 - 2023/12/15
+
+- added multi-byte I/O access
+
+
 version 26 - 2021/12/29
 
 - fixed instructions DIUM, DIDM (setting of the Zero flag)

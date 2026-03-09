@@ -75,10 +75,11 @@ interface
     OP_bit	= $01;
     LCDCE	= (CE1_bit or CE2_bit);
 
+    XTAL	= 910;	{ nominal CPU clock frequency in kHz }
+
 { free adress space, number of bytes determined by the function FetchOpcode }
     dummysrc: array[0..3] of byte = ( $FF, $FF, $FF, $FF );
 
-  var
     memdef: array[0..MEMORIES-1] of mem_properties = (
       (	storage:	nil;
 	first:		$00000;
@@ -132,6 +133,7 @@ interface
 	filename:	'rom3.bin' )
     );
 
+  var
 { 5-bit registers }
     sx, sy, sz: byte;
 
@@ -165,10 +167,12 @@ interface
     cycles: integer;		{ counter of the clock pulses }
     acycles: integer;		{ clock pulse counter accumulator }
     speed: integer;		{ 0 for fast mode, 4 for slow mode }
-    procptr: pointer;		{ pointer to a procedure that should be
+    procptr: array[0..7] of pointer;
+				{ list of pointers to procedures that should be
 				  executed after a machine code instruction,
 				  usually to complete an I/O register write
 				  cycle }
+    procindex: integer;		{ index to the procptr array }
     OscFreq: integer;		{ CPU clock frequency in kHz }
     CpuStop: boolean;		{ True stops the CPU, used in the debug mode }
     CpuDelay: integer;		{ delay after hiding the Debug Window,

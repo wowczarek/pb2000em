@@ -18,6 +18,7 @@ object MainForm: TMainForm
   Position = poScreenCenter
   OnClose = FormClose
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   OnDeactivate = FormDeactivate
   OnKeyDown = FormKeyDown
   OnKeyPress = FormKeyPress
@@ -29,13 +30,6 @@ object MainForm: TMainForm
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
-  object RunTimer: TThreadedTimer
-    Interval = 10
-    OnTimer = OnRunTimer
-    ThreadPriority = tpHigher
-    Left = 16
-    Top = 8
-  end
   object RefreshTimer: TTimer
     Enabled = False
     Interval = 50
@@ -49,10 +43,7 @@ object MainForm: TMainForm
     Left = 80
     Top = 8
   end
-  object FddSocket: TClientSocket
-    Active = False
-    ClientType = ctBlocking
-    Port = 0
+  object OpenDialog1: TOpenDialog
     Left = 112
     Top = 8
   end
