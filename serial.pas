@@ -44,7 +44,6 @@ type
     QueueFlush: TButton;
     QueueBar: TProgressBar;
     TestLabel: TLabel;
-    Int1Timer: TThreadedTimer;
     CntReset: TButton;
     PBOpenPanel: TPanel;
     BtnToggle: TButton;
@@ -124,6 +123,8 @@ type
         XoffEnabled: Boolean;
         { is this thing on? }
         ImEnabled: Boolean;
+        {Int1 timer}
+        Int1Timer: TThreadedTimer;
         { calculate automatic block delay }
         function AutoDelay: Integer;
         procedure SetXonWait(x: Boolean);
@@ -443,6 +444,9 @@ end;
 { initialisation tasks }
 procedure TSerialForm.FormCreate(Sender: TObject);
 begin
+        Int1Timer := TThreadedTimer.Create(Self);
+        Int1Timer.Interval := 1;
+        Int1Timer.OnTimer := Int1TimerTimer;
         gotClosed := false;
         SerialEnabled(True);
         Int1Set := False;
@@ -695,6 +699,7 @@ procedure TSerialForm.FormDestroy(Sender: TObject);
 begin
 
         Int1Timer.Enabled := False;
+        Int1Timer.Free;
         LedTimer.Enabled := False;
 
         { revisit what needs freed, but this is on exit, so... }

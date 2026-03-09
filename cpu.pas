@@ -40,8 +40,8 @@ end {ResetAll};
     iserv := 0;
     speed := 0;
     acycles := 0;
+    CpuSleep := False;
   end {CpuReset};
-
 
   procedure CpuWakeUp (apo_value: boolean);
   begin

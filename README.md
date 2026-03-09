@@ -1,18 +1,19 @@
 # Casio PB-2000C Emulator for Windows
 
-## Version 26-wo
+## Version 30-wo
 
 This is the source for an enhanced version of Piotr Piątek's PB-2000C emulator written in / for Borland Delphi 5 and this branch corresponds to Piotr's V26 of the PB-2000C emulator.
 
 The PB-2000C is my platform of choice and while some items may or may not end up in either the original PB-2000C emulator or any of the other emulators for related platforms by Piotr, I am  not porting any of this to other Piotr's emulators - you can do this yourself easily enough if you wish.
 
-**Note:** *This repository does NOT contain any of the Casio ROM images required for the emulator to function.*
+**Note: 1** *This repository does NOT contain any of the Casio ROM images required for the emulator to function.*
+**Note: 2** *For now, changes to the original source in versions 27 and 28 (multi-byte I/O and removal of networked FDD code) have not been ported *
 
 The compiled pb2000c.exe or the contents of the .zip file from the Releases section once available (including - or not - the .ini file) can be copied into the location where the extracted Piotr's emulator resides, or the required `rom0.bin`, `rom1.bin` and an optional card image `rom2.bin` can be copied in from, erm, somewhere.
 
 Author's official website is at: http://www.pisi.com.pl/piotr433/pb2000ee.htm
 
-The original sources reside in branch v26-piotr443.
+The original sources reside in branch v30-piotr443.
 
 ## Main changes
 
